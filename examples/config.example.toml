@@ -19,13 +19,15 @@ author_email = "jane@example.com"
 # public_path_prefix = ""
 
 [models]
-# Ollama model names. Any model you've pulled locally (`ollama pull <name>`) works.
-summarize_model = "llama3.2"
-rank_model = "qwen3.5:9b"
-# dedup_model can also be a "claude-*" model name — see docs/SETUP.md for how
-# that path works (it shells out to a local `claude` CLI, not an API key).
-dedup_model = "llama3.2"
-ad_detector_model = "ad-detector"
+# "provider/model" — provider defaults to ollama if omitted, so bare names
+# like "llama3.2" work too. Any Ollama model you've pulled locally
+# (`ollama pull <name>`) works; "anthropic/<model>" shells out to a local
+# `claude` CLI instead — see docs/SETUP.md.
+summarize_model = "ollama/llama3.2"
+rank_model = "ollama/qwen3.5:9b"
+dedup_model = "ollama/llama3.2"
+# dedup_model = "anthropic/claude-haiku-4-5"  # alternative: local claude CLI
+ad_detector_model = "ollama/ad-detector"
 ad_gate_enabled = true
 
 [pipeline]

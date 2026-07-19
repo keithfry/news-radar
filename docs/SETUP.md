@@ -78,12 +78,22 @@ Tune `[pipeline] llm_workers` in `config.toml` to match Ollama's
 `OLLAMA_NUM_PARALLEL` setting — more workers than Ollama can run concurrently
 just queues requests without speeding anything up.
 
-### Optional: Claude for deduplication (`dedup_model = "claude-*"`)
+### Model names: `provider/model`
 
-If you set `[models] dedup_model` (or the `DEDUP_MODEL` env var) to a model
-name starting with `"claude"`, `newsradar.llm._dedup_batch` does **not** call
-an API directly and does **not** read `ANTHROPIC_API_KEY` itself. Instead it
-shells out to a local `claude` CLI binary:
+Every `[models]` value (`summarize_model`, `rank_model`, `dedup_model`,
+`ad_detector_model`) accepts an optional `provider/` prefix — e.g.
+`"ollama/llama3.2:3b"` or `"anthropic/claude-haiku-4-5"`. A bare name with no
+recognized provider prefix (`"llama3.2:3b"`, or an Ollama registry path like
+`"hf.co/user/model"`) is treated as Ollama — Ollama is the default provider,
+so existing bare-name configs keep working unchanged.
+
+#### `anthropic/*` models
+
+If you set any model to `"anthropic/<model>"` (e.g.
+`dedup_model = "anthropic/claude-haiku-4-5"`), `newsradar.llm._chat_anthropic`
+does **not** call the Anthropic API directly and does **not** read
+`ANTHROPIC_API_KEY` itself. Instead it shells out to a local `claude` CLI
+binary:
 
 ```python
 claude_bin = shutil.which("claude") or os.path.expanduser("~/.local/bin/claude")
@@ -95,11 +105,12 @@ installed and authenticated on the machine running news-radar (`claude` on
 your `PATH`, or present at `~/.local/bin/claude`) — however *that* CLI is
 configured to authenticate (subscription login or `ANTHROPIC_API_KEY` in its
 own environment) is between you and it; news-radar itself never touches an
-Anthropic API key or SDK. If you'd rather call the Anthropic API directly
-instead of shelling out to the CLI, the `dedup-anthropic` extra
-(`pip install news-radar[dedup-anthropic]`) pulls in the `anthropic` SDK as a
-dependency, but wiring it in is left to you — the current `_dedup_batch`
-implementation only supports the CLI subprocess path.
+Anthropic API key or SDK. This is available to *any* pipeline stage, not just
+dedup — `summarize_model = "anthropic/claude-haiku-4-5"` works the same way.
+If you'd rather call the Anthropic API directly instead of shelling out to the
+CLI, the `dedup-anthropic` extra (`pip install news-radar[dedup-anthropic]`)
+pulls in the `anthropic` SDK as a dependency, but wiring it in (a new
+`_chat_anthropic` implementation) is left to you.
 
 ## Kokoro TTS (required for podcast audio; skip with `--no-podcast`)
 

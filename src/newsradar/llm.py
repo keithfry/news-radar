@@ -1,8 +1,16 @@
-"""Thin Ollama wrapper for all LLM operations in the pipeline."""
+"""Thin multi-provider LLM wrapper for all LLM operations in the pipeline.
+
+Model names use an optional "provider/model" prefix (e.g. "ollama/llama3.2:3b",
+"anthropic/claude-haiku-4-5"). A bare name with no recognized provider prefix
+(e.g. "llama3.2:3b", or an Ollama registry path like "hf.co/user/model") is
+treated as an Ollama model name — Ollama is the default provider.
+"""
 
 import json
 import os
 import re
+import shutil
+import subprocess
 import sys
 import threading
 import time
@@ -16,6 +24,8 @@ from .topics import Topic
 _llm_call_lock = threading.Lock()
 _llm_call_count = 0
 _llm_total_duration = 0.0
+
+_KNOWN_PROVIDERS = {"ollama", "anthropic"}
 
 
 def llm_stats() -> tuple[int, float]:
@@ -36,7 +46,22 @@ def _parse_json(text: str) -> dict:
     return json_repair.loads(text)
 
 
+def _parse_model(model: str) -> tuple[str, str]:
+    """Split "provider/model" into (provider, model_name). Defaults to ollama."""
+    provider, sep, rest = model.partition("/")
+    if sep and provider in _KNOWN_PROVIDERS:
+        return provider, rest
+    return "ollama", model
+
+
 def _chat(prompt: str, model: str, json_mode: bool = False, think: bool = False, num_ctx: int | None = None, _retries: int = 3) -> str:
+    provider, model_name = _parse_model(model)
+    if provider == "anthropic":
+        return _chat_anthropic(prompt, model_name, json_mode=json_mode)
+    return _chat_ollama(prompt, model_name, json_mode=json_mode, think=think, num_ctx=num_ctx, _retries=_retries, _log_model=model)
+
+
+def _chat_ollama(prompt: str, model: str, json_mode: bool = False, think: bool = False, num_ctx: int | None = None, _retries: int = 3, _log_model: str | None = None) -> str:
     global _llm_call_count, _llm_total_duration
 
     kwargs: dict = {"think": think}
@@ -67,9 +92,33 @@ def _chat(prompt: str, model: str, json_mode: bool = False, think: bool = False,
         _llm_total_duration += elapsed
         cnt = _llm_call_count
 
-    print(f"  [llm:{cnt}] {model} {elapsed:.3f}s", flush=True)
+    print(f"  [llm:{cnt}] {_log_model or model} {elapsed:.3f}s", flush=True)
 
     return response["message"]["content"].strip()
+
+
+def _chat_anthropic(prompt: str, model: str, json_mode: bool = False) -> str:
+    """Shell out to the local `claude` CLI — relies on it being installed and
+    authenticated locally, not the Anthropic API/ANTHROPIC_API_KEY directly."""
+    global _llm_call_count, _llm_total_duration
+
+    claude_bin = shutil.which("claude") or os.path.expanduser("~/.local/bin/claude")
+
+    t0 = time.perf_counter()
+    result = subprocess.run(
+        [claude_bin, "-p", prompt, "--model", model, "--output-format", "text"],
+        capture_output=True, text=True, check=True,
+    )
+    elapsed = time.perf_counter() - t0
+
+    with _llm_call_lock:
+        _llm_call_count += 1
+        _llm_total_duration += elapsed
+        cnt = _llm_call_count
+
+    print(f"  [llm:{cnt}] anthropic/{model} {elapsed:.3f}s", flush=True)
+
+    return result.stdout.strip()
 
 
 _ARTICLE_CHAR_LIMIT = 24000  # ~6k tokens, leaves headroom for prompt+output in a 32k ctx window
@@ -294,17 +343,7 @@ def _dedup_batch(batch: list[tuple[int, dict]], model: str) -> set[int]:
         "Response (JSON only):"
     )
 
-    if model.startswith("claude"):
-        import shutil
-        import subprocess
-        claude_bin = shutil.which("claude") or os.path.expanduser("~/.local/bin/claude")
-        result = subprocess.run(
-            [claude_bin, "-p", prompt, "--model", model, "--output-format", "text"],
-            capture_output=True, text=True, check=True,
-        )
-        raw = result.stdout
-    else:
-        raw = _chat(prompt, model, json_mode=True)
+    raw = _chat(prompt, model, json_mode=True)
 
     try:
         keep_list = _parse_json(raw).get("keep", [])
