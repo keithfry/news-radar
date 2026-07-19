@@ -30,7 +30,7 @@ from zoneinfo import ZoneInfo
 
 ET = ZoneInfo("America/New_York")
 
-from .article_fetcher import enrich_with_full_text, fetch_article_text, source_name_from_url
+from .article_fetcher import enrich_with_full_text, fetch_article_text, fetch_article_text_and_title, source_name_from_url
 from .config import Config, load_config
 from .email_fetcher import _get_credentials, fetch_emails
 from .enricher import enrich, write_enriched_json
@@ -115,7 +115,7 @@ def _process_one(idx: int, total: int, item: dict, source_type: str, topic: Topi
     existing_text = item.get("body") or item.get("summary", "")
     label = item.get("source", "unknown")
 
-    if source_type == "email" and not title:
+    if not title:
         title = existing_text[:70].strip() or "(untitled)"
 
     if not title:
@@ -200,14 +200,14 @@ def _fetch_links_parallel(email_items: list[dict], config: Config) -> list[dict]
 
     def _fetch(email_source: str, url: str) -> dict | None:
         log(f"    → fetching: {url[:80]}")
-        text = fetch_article_text(url)
+        text, title = fetch_article_text_and_title(url)
         if not text:
             log(f"    → skip (could not fetch): {url[:60]}")
             return None
         source = source_name_from_url(url)
         log(f"    → fetched {len(text):,} chars from {source}")
         return {
-            "title": "",
+            "title": title,
             "link": url,
             "source": source,
             "summary": text[: config.pipeline.article_body_char_cap],

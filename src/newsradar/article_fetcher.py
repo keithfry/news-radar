@@ -32,18 +32,29 @@ def source_name_from_url(url: str) -> str:
 
 def fetch_article_text(url: str, timeout: int = 10) -> str | None:
     """Fetch a URL and return the main article text, or None on failure."""
+    text, _title = _fetch_article(url, timeout=timeout)
+    return text
+
+
+def fetch_article_text_and_title(url: str, timeout: int = 10) -> tuple[str | None, str]:
+    """Fetch a URL and return (main article text, page title). Title is '' if unavailable."""
+    return _fetch_article(url, timeout=timeout)
+
+
+def _fetch_article(url: str, timeout: int = 10) -> tuple[str | None, str]:
     try:
         resp = requests.get(url, headers=_HEADERS, timeout=timeout, allow_redirects=True)
         resp.raise_for_status()
     except Exception as e:
         print(f"[article_fetcher] fetch failed {url}: {e}", file=sys.stderr)
-        return None
+        return None, ""
 
     content_type = resp.headers.get("content-type", "")
     if "html" not in content_type:
-        return None
+        return None, ""
 
     soup = BeautifulSoup(resp.text, "html.parser")
+    title = soup.title.get_text(strip=True) if soup.title else ""
 
     # Remove noise
     for tag in soup(["script", "style", "nav", "header", "footer",
@@ -69,15 +80,15 @@ def fetch_article_text(url: str, timeout: int = 10) -> str | None:
     # Treat short pages as failures — likely soft 404s, login walls, or empty pages
     if len(result) < 400:
         print(f"[article_fetcher] skipping {url}: content too short ({len(result)} chars)", file=sys.stderr)
-        return None
+        return None, ""
 
     # Check the first 20% of the text for soft-404 signals
     preview = result[:max(1, len(result) // 5)].lower()
     if "404" in preview or "page not found" in preview:
         print(f"[article_fetcher] skipping {url}: soft 404 detected in page header", file=sys.stderr)
-        return None
+        return None, ""
 
-    return result
+    return result, title
 
 
 def enrich_with_full_text(
