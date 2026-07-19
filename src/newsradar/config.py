@@ -35,6 +35,11 @@ class SiteConfig:
     base_url: str = ""
     author_name: str = ""
     author_email: str = ""
+    # URL path segment between base_url and each topic's output_dir, for when
+    # output_root is NOT itself the published docroot (e.g. output_root is a
+    # subdirectory of a larger site). Empty (default) means output_root IS the
+    # docroot, so URLs are just f"{base_url}/{topic.output_dir}/...".
+    public_path_prefix: str = ""
 
 
 @dataclass
@@ -105,6 +110,7 @@ def load_config(config_path: str | Path, env_file: str | Path | None = None) -> 
         base_url=site_raw.get("base_url", ""),
         author_name=site_raw.get("author_name", ""),
         author_email=site_raw.get("author_email", ""),
+        public_path_prefix=site_raw.get("public_path_prefix", "").strip("/"),
     )
 
     models_raw = raw.get("models", {})

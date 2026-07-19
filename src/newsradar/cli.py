@@ -353,9 +353,10 @@ def _run_topic(
             log(f"  Newsletters: {len(newsletters)}, Articles: {len(articles)}, Papers: {len(papers)}, Errors: {len(rss_errors)}")
             ym_dir = as_of.strftime("%Y-%m")
             date_str = as_of.strftime("%Y-%m-%d")
-            _mp3_url = None if args.no_podcast else f"{config.site.base_url}/{topic.output_dir}/{ym_dir}/{file_prefix}-{date_str}.mp3"
-            _rss_url = None if args.no_podcast else f"{config.site.base_url}/{topic.output_dir}/podcast.rss"
-            _og_url = None if args.no_podcast else f"{config.site.base_url}/{topic.output_dir}/{ym_dir}/{file_prefix}-{date_str}.og.jpg"
+            _url_base = f"{config.site.base_url}/{config.site.public_path_prefix}".rstrip("/") if config.site.public_path_prefix else config.site.base_url
+            _mp3_url = None if args.no_podcast else f"{_url_base}/{topic.output_dir}/{ym_dir}/{file_prefix}-{date_str}.mp3"
+            _rss_url = None if args.no_podcast else f"{_url_base}/{topic.output_dir}/podcast.rss"
+            _og_url = None if args.no_podcast else f"{_url_base}/{topic.output_dir}/{ym_dir}/{file_prefix}-{date_str}.og.jpg"
             html = generate_html(
                 newsletters=newsletters, articles=articles,
                 papers=papers, errors=rss_errors, date=as_of,
@@ -413,9 +414,10 @@ def _run_topic(
 
     # --- Step 8b: Generate podcast RSS feed ---
     log("── Step 8b: Generating podcast RSS ──")
+    _rss_output_dir_rel = f"{config.site.public_path_prefix}/{topic.output_dir}" if config.site.public_path_prefix else topic.output_dir
     rss_path = generate_podcast_rss(
         base_dir, topic, base_url=config.site.base_url,
-        author_name=config.site.author_name, output_dir_rel=topic.output_dir, log=log,
+        author_name=config.site.author_name, output_dir_rel=_rss_output_dir_rel, log=log,
     )
     out_paths.append(rss_path)
 

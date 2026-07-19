@@ -10,6 +10,13 @@ title = "My News Radar"
 base_url = "https://example.github.io/my-news-radar"
 author_name = "Jane Example"
 author_email = "jane@example.com"
+# URL path segment between base_url and each topic's output_dir. Leave unset
+# (or "") if [paths] output_root below IS the published docroot — the common
+# case, and true for this example (output_root = "output" gets served
+# directly at base_url). Set this if output_root is a SUBDIRECTORY of a larger
+# site's docroot (e.g. output_root = "../my-site/techradar" but base_url points
+# at "my-site"'s root) — set it to "techradar" in that case.
+# public_path_prefix = ""
 
 [models]
 # Ollama model names. Any model you've pulled locally (`ollama pull <name>`) works.
