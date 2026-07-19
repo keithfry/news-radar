@@ -9,6 +9,8 @@ Usage:
     newsradar --config config.toml --time 08:00                # cut off at 08:00 ET today
     newsradar --config config.toml --dry-run                   # generate output only, skip publish hook
     newsradar --config config.toml --no-email                  # skip Gmail (RSS only)
+    newsradar --config config.toml --podcast-only               # rebuild podcast from existing JSON
+    newsradar --config config.toml --transcript-only             # rebuild transcript.json only, no TTS
     newsradar --config config.toml --refresh-token              # re-authenticate with Gmail, then exit
     newsradar ad-detector install                                # install the ad-detector Ollama model
 """
@@ -281,6 +283,95 @@ def _run_topic(
 
     as_of_utc = as_of.astimezone(timezone.utc)
 
+    _rss_output_dir_rel = f"{config.site.public_path_prefix}/{topic.output_dir}" if config.site.public_path_prefix else topic.output_dir
+
+    # --- Transcript-only shortcut: rebuild transcript.json from existing JSON/chapters, no TTS/fetch ---
+    if args.transcript_only:
+        from .podcast_generator import _build_transcript_json, _interpolate_sentences, _split_sentences, _voice_for
+
+        json_path = output_dir / f"{file_prefix}-{as_of.strftime('%Y-%m-%d')}.json"
+        chap_path = output_dir / f"{file_prefix}-{as_of.strftime('%Y-%m-%d')}.chapters.json"
+        if not json_path.exists():
+            log(f"ERROR: no JSON found at {json_path}")
+            return []
+        enriched_data = json.loads(json_path.read_text())
+        podcast_items = [i for i in enriched_data["items"] if i.get("include_in_podcast")]
+        intro_script = enriched_data.get("intro_script", "")
+        outro_script = enriched_data.get("outro_script", "")
+
+        total_duration = 0.0
+        outro_start = None
+        if chap_path.exists():
+            chap_data = json.loads(chap_path.read_text())
+            chaps = chap_data.get("chapters", [])
+            if chaps:
+                total_duration = float(chaps[-1].get("endTime", 0))
+                sign_off = next((c for c in reversed(chaps) if c.get("title") == "Sign Off"), None)
+                if sign_off:
+                    outro_start = float(sign_off["startTime"])
+
+        segments: list[dict] = []
+        intro_end = float(podcast_items[0]["chapter_start_seconds"]) if podcast_items else total_duration
+        for sent, s, e in _interpolate_sentences(_split_sentences(intro_script), 0.0, intro_end):
+            segments.append({"startTime": s, "endTime": e, "text": sent, "voice": _voice_for(0)})
+
+        for idx, item in enumerate(podcast_items):
+            item_start = float(item["chapter_start_seconds"])
+            if idx + 1 < len(podcast_items):
+                item_end = float(podcast_items[idx + 1]["chapter_start_seconds"])
+            else:
+                item_end = outro_start if outro_start is not None else total_duration
+            for sent, s, e in _interpolate_sentences(_split_sentences(item["audio_script"]), item_start, item_end):
+                segments.append({"startTime": s, "endTime": e, "text": sent, "voice": _voice_for(item["voice_index"])})
+
+        if outro_script and outro_start is not None:
+            for sent, s, e in _interpolate_sentences(_split_sentences(outro_script), outro_start, total_duration):
+                segments.append({"startTime": s, "endTime": e, "text": sent, "voice": _voice_for(0)})
+
+        transcript_path = output_dir / f"{file_prefix}-{as_of.strftime('%Y-%m-%d')}.transcript.json"
+        transcript_path.write_text(_build_transcript_json(segments), encoding="utf-8")
+        log(f"  Wrote transcript JSON: {transcript_path} ({len(segments)} segments)")
+        log("── Generating podcast RSS ──")
+        rss_path = generate_podcast_rss(
+            base_dir, topic, base_url=config.site.base_url,
+            author_name=config.site.author_name, output_dir_rel=_rss_output_dir_rel, log=log,
+        )
+        if args.dry_run:
+            log("Dry run — skipping publish hook.")
+            return []
+        return [transcript_path, rss_path]
+
+    # --- Podcast-only shortcut: rebuild podcast audio/cover from existing JSON, no fetch/enrich/HTML ---
+    if args.podcast_only:
+        json_path = output_dir / f"{file_prefix}-{as_of.strftime('%Y-%m-%d')}.json"
+        if not json_path.exists():
+            log(f"ERROR: no JSON found at {json_path} — run without --podcast-only first")
+            return []
+        log(f"── Podcast-only mode: loading {json_path.name} ──")
+        enriched_data = json.loads(json_path.read_text())
+        log("── Generating podcast audio ──")
+        try:
+            mp3_path, chap_path, transcript_path, cover_path, og_path = generate_podcast(
+                enriched_data, as_of, output_dir, topic=topic,
+                tts_workers=config.pipeline.tts_workers, log=log,
+            )
+            log(f"  Podcast generated: {mp3_path.name}")
+        except Exception as e:
+            log(f"ERROR: podcast generation failed: {e}")
+            return []
+        write_enriched_json(enriched_data, json_path)
+        log("  Updated JSON with actual chapter times")
+        log("── Generating podcast RSS ──")
+        rss_path = generate_podcast_rss(
+            base_dir, topic, base_url=config.site.base_url,
+            author_name=config.site.author_name, output_dir_rel=_rss_output_dir_rel, log=log,
+        )
+        if args.dry_run:
+            log("Dry run — skipping publish hook.")
+            return []
+        extras = [p for p in [transcript_path, cover_path, og_path] if p]
+        return [mp3_path, chap_path, json_path, rss_path] + extras
+
     # --- Step 1: Fetch RSS feeds ---
     log(f"── Step 1: Fetching {topic.display_name} RSS feeds ──")
     rss_articles, rss_errors = fetch_all_feeds(config, topic, hours=args.hours, as_of=as_of_utc)
@@ -414,7 +505,6 @@ def _run_topic(
 
     # --- Step 8b: Generate podcast RSS feed ---
     log("── Step 8b: Generating podcast RSS ──")
-    _rss_output_dir_rel = f"{config.site.public_path_prefix}/{topic.output_dir}" if config.site.public_path_prefix else topic.output_dir
     rss_path = generate_podcast_rss(
         base_dir, topic, base_url=config.site.base_url,
         author_name=config.site.author_name, output_dir_rel=_rss_output_dir_rel, log=log,
@@ -466,6 +556,8 @@ def _add_run_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--dry-run", action="store_true", help="Generate output only, skip the publish hook")
     parser.add_argument("--no-email", action="store_true", help="Skip Gmail — fetch RSS feeds only")
     parser.add_argument("--no-podcast", action="store_true", help="Skip podcast audio generation")
+    parser.add_argument("--podcast-only", action="store_true", help="Rebuild podcast audio from existing JSON (skip fetch/enrich/HTML)")
+    parser.add_argument("--transcript-only", action="store_true", help="Rebuild transcript.json from existing JSON/chapters (no TTS, no fetch)")
     parser.add_argument("--publish-hook", type=str, default=None, help="Override the configured publish hook: 'module:function'")
     parser.add_argument("--refresh-token", action="store_true", help="Delete the Gmail token and re-authenticate, then exit")
 
@@ -525,7 +617,7 @@ def main() -> None:
 
         email_items: list[dict] = []
         linked_articles: list[dict] = []
-        if not args.no_email:
+        if not args.no_email and not args.podcast_only and not args.transcript_only:
             log("── Fetching Gmail (shared across topics) ──")
             try:
                 email_items = fetch_emails(config, hours=args.hours, as_of=as_of_utc)
@@ -546,7 +638,7 @@ def main() -> None:
                     log("  Run: newsradar --config ... --refresh-token")
                     return
                 raise
-        else:
+        elif not args.podcast_only and not args.transcript_only:
             log("── Gmail skipped (--no-email) ──")
         log("")
 
