@@ -1,0 +1,40 @@
+[project]
+name = "newsradar"
+version = "0.1.0"
+description = "Config-driven RSS + email news digest pipeline: fetch, classify, summarize, dedupe via local LLMs, publish as HTML/podcast."
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.13"
+dependencies = [
+    "feedparser",
+    "ollama",
+    "google-auth-oauthlib",
+    "google-auth-httplib2",
+    "google-api-python-client",
+    "python-dotenv",
+    "beautifulsoup4",
+    "matplotlib>=3.10.8",
+    "kokoro>=0.9.4,<1.0",
+    "mutagen>=1.47",
+    "soundfile>=0.12",
+    "json-repair>=0.60.1",
+    "Pillow>=10.0",
+    "tomli>=2.0; python_version < '3.11'",
+]
+
+[project.scripts]
+newsradar = "newsradar.cli:main"
+
+[project.optional-dependencies]
+dedup-anthropic = ["anthropic"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/newsradar"]
+artifacts = ["src/newsradar/ad_detector/AdDetectorModelfile"]
+
+[dependency-groups]
+dev = ["pytest"]

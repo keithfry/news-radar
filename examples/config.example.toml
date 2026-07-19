@@ -1,0 +1,143 @@
+# news-radar example configuration
+#
+# Copy this file to config.toml (next to your feeds.csv) and edit the values
+# below. Nothing in this file is secret — it's safe to commit to a public repo.
+# Secrets (Gmail client id/secret, ANTHROPIC_API_KEY, etc.) belong in a .env
+# file next to this config, or in real environment variables. See docs/SETUP.md.
+
+[site]
+title = "My News Radar"
+base_url = "https://example.github.io/my-news-radar"
+author_name = "Jane Example"
+author_email = "jane@example.com"
+
+[models]
+# Ollama model names. Any model you've pulled locally (`ollama pull <name>`) works.
+summarize_model = "llama3.2"
+rank_model = "qwen3.5:9b"
+# dedup_model can also be a "claude-*" model name — see docs/SETUP.md for how
+# that path works (it shells out to a local `claude` CLI, not an API key).
+dedup_model = "llama3.2"
+ad_detector_model = "ad-detector"
+ad_gate_enabled = true
+
+[pipeline]
+lookback_hours = 24
+llm_workers = 2
+url_workers = 10
+article_body_char_cap = 20000
+tts_workers = 2
+arxiv_max_papers = 10
+
+[gmail]
+# client_id / client_secret / credentials_path are read from the environment
+# or .env, never from this file (see docs/SETUP.md). token_path and
+# credentials_path below are resolved relative to this config file if not
+# absolute.
+token_path = "secrets/token.json"
+# credentials_path = "secrets/credentials.json"
+
+[paths]
+output_root = "output"
+feeds_csv = "feeds.csv"
+
+# --- Topics -----------------------------------------------------------------
+# Each [[topics]] entry defines one digest. feed_category must match a value
+# in the "Category" column of feeds.csv (or "Both", which is included in every
+# topic). classifier_prompt is the full LLM instruction block used to decide
+# whether an item belongs in this topic's digest.
+
+[[topics]]
+name = "ai"
+display_name = "AI"
+feed_category = "AI"
+output_dir = "ai"
+file_prefix = "ai-radar"
+fail_open = true  # on LLM parse failure, keep the item (matches original AI behavior)
+
+# Non-empty keywords enable a fast-path: content matching none of these
+# keywords skips straight to the LLM classifier below rather than being
+# auto-accepted. An empty list (see the robotics topic) means every item is
+# always LLM-classified.
+keywords = [
+    "ai", "ml", "llm", "robot", "neural", "machine learning",
+    "deep learning", "language model", "generative", "autonomous vehicle",
+    "reinforcement learning", "transformer model", "diffusion model",
+    "anthropic", "openai", "google deepmind", "nvidia ai", "nvidia cuda",
+    "hugging face",
+]
+
+classifier_prompt = """
+Is the following content specifically about artificial intelligence, machine learning, robotics, or LLMs? Answer YES only if the primary topic is AI/ML/robotics technology.
+
+Answer NO for: travel, lifestyle, product sales, referral programs, real estate, finance, sports, gaming, cloud gaming, advertisements, promotional emails, merchandise listings, gift guides, product catalogs, sponsored content, politics, elections, campaigns, live streams/videos not primarily about AI/ML/robotics, or any tech topic not primarily about AI/ML/robotics.
+
+Example:
+Title: 'Live video with Prof G Media now: Can Dems Take the Senate?'
+→ {"relevant": false}
+
+Answer with a JSON object: {"relevant": true} or {"relevant": false}.
+"""
+
+[[topics]]
+name = "robotics"
+display_name = "Robotics"
+feed_category = "Robotics"
+output_dir = "robotics"
+file_prefix = "robotics-radar"
+fail_open = false  # on LLM parse failure, drop the item (matches original Robotics behavior)
+
+# Intentionally empty — robotics always runs the LLM classifier below rather
+# than using a keyword fast-path. See classifier_prompt for the criteria.
+keywords = []
+
+classifier_prompt = """
+You are a strict robotics content filter. Your job is to decide if an article belongs in a robotics digest. When in doubt, answer NO.
+
+Answer YES only if the article's PRIMARY topic is one of:
+  - Physical robots (humanoids, arms, mobile robots, cobots)
+  - Drones / UAVs / UAS
+  - Robot hardware, actuators, sensors, end-effectors
+  - Industrial automation with physical machinery
+  - Robot operating systems (ROS/ROS2) and robot-specific software
+  - Autonomous vehicles (self-driving cars, AGVs)
+  - Embodied AI where a physical robot is the subject
+  - Robotics research (manipulation, navigation, HRI, SLAM)
+
+Answer NO for ALL of the following — even if they mention robots in passing:
+  - LLMs, chatbots, language models, text/image/audio AI
+  - AI assistants (ChatGPT, Claude, Gemini, Copilot)
+  - Reinforcement learning research with no physical robot
+  - AI policy, regulation, ethics, copyright, deepfakes
+  - Data science, MLOps, model training, quantization, inference
+  - AI in education, healthcare, finance, or business strategy
+  - Newsletter digests about general AI news
+  - Cloud computing, APIs, developer tools (unless robot-specific)
+
+Examples:
+Title: 'Video Friday: Watch This Running Robot Not Fall Down Stairs'
+→ {"relevant": true}
+
+Title: 'AGIBOT Challenge Shifts Embodied AI to Physical Hardware at ICRA'
+→ {"relevant": true}
+
+Title: 'Tokenmaxxing might be dead'
+→ {"relevant": false}
+
+Title: 'Fix Your RL Environment Or Risk Bad Model Training'
+→ {"relevant": false}
+
+Title: 'Anthropic launches upgraded model for developers'
+→ {"relevant": false}
+
+Title: 'Schools Shift Views on Ban After ChatGPT Panic'
+→ {"relevant": false}
+
+Answer with JSON only: {"relevant": true} or {"relevant": false}.
+"""
+
+# --- Publish hook -------------------------------------------------------
+# Uncomment to auto-commit + push generated output after each run (skipped
+# automatically when --dry-run is passed). See examples/hooks/git_publish.py.
+# [publish]
+# hook = "hooks.git_publish:publish_hook"

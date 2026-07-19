@@ -1,0 +1,8 @@
+# news-radar — Linux/cron equivalent of examples/launchd/com.example.newsradar.plist.template
+#
+# Install with: crontab -e, then paste the line below (edit the path first).
+# Unlike launchd's WakeForJob, cron will NOT wake a sleeping machine — this is
+# meant for an always-on Linux host or server.
+#
+# Run daily at 8:00 AM local time:
+0 8 * * * cd /path/to/news-radar && uv run newsradar --config config.toml >> logs/cron.log 2>&1
