@@ -49,6 +49,10 @@ class ModelsConfig:
     dedup_model: str = "llama3.2"
     ad_detector_model: str = "ad-detector"
     ad_gate_enabled: bool = True
+    # Topic relevance classification is a judgment call, not prose generation —
+    # defaults to rank_model (already a judgment-task model, already loaded)
+    # rather than summarize_model, which is too weak for multi-clause prompts.
+    classify_model: str = "qwen3.5:9b"
 
 
 @dataclass
@@ -114,9 +118,10 @@ def load_config(config_path: str | Path, env_file: str | Path | None = None) -> 
     )
 
     models_raw = raw.get("models", {})
+    rank_model = os.environ.get("RANK_MODEL", models_raw.get("rank_model", "qwen3.5:9b"))
     models = ModelsConfig(
         summarize_model=os.environ.get("SUMMARIZE_MODEL", models_raw.get("summarize_model", "llama3.2")),
-        rank_model=os.environ.get("RANK_MODEL", models_raw.get("rank_model", "qwen3.5:9b")),
+        rank_model=rank_model,
         dedup_model=os.environ.get("DEDUP_MODEL", models_raw.get("dedup_model", "llama3.2")),
         ad_detector_model=os.environ.get(
             "AD_DETECTOR_MODEL", models_raw.get("ad_detector_model", "ad-detector")
@@ -124,6 +129,10 @@ def load_config(config_path: str | Path, env_file: str | Path | None = None) -> 
         ad_gate_enabled=_bool_env(
             os.environ.get("AD_GATE_ENABLED"), bool(models_raw.get("ad_gate_enabled", True))
         ),
+        # Defaults to rank_model — not summarize_model — since classification is
+        # a judgment call, not prose generation. Unaffected by RANK_MODEL env
+        # override unless CLASSIFY_MODEL is also left unset in the TOML.
+        classify_model=os.environ.get("CLASSIFY_MODEL", models_raw.get("classify_model", rank_model)),
     )
 
     pipeline_raw = raw.get("pipeline", {})

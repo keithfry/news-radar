@@ -137,7 +137,7 @@ def _process_one(idx: int, total: int, item: dict, source_type: str, topic: Topi
 
     if not any(kw in lowered for kw in topic.keywords):
         log(f"    [{idx}] → classifying with LLM (no {topic.display_name} keywords matched)...")
-        if not classify_topic(title, existing_text[:500], config.models.summarize_model, topic):
+        if not classify_topic(title, existing_text[:500], config.models.classify_model, topic):
             log(f"    [{idx}] → skip (not {topic.display_name}-related)")
             return None
         log(f"    [{idx}] → classified as {topic.display_name}-related")
@@ -275,6 +275,7 @@ def _run_topic(
     log(f"Output dir:      {output_dir}")
     log(f"Summarize model: {config.models.summarize_model}")
     log(f"Rank model:      {config.models.rank_model}")
+    log(f"Classify model:  {config.models.classify_model}")
     log(f"Dedup model:     {config.models.dedup_model}")
     log(f"LLM workers:     {config.pipeline.llm_workers}  (set OLLAMA_NUM_PARALLEL={config.pipeline.llm_workers} to match)")
     log(f"URL workers:     {config.pipeline.url_workers}")

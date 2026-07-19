@@ -25,6 +25,9 @@ author_email = "jane@example.com"
 # `claude` CLI instead — see docs/SETUP.md.
 summarize_model = "ollama/llama3.2"
 rank_model = "ollama/qwen3.5:9b"
+# classify_model = "ollama/qwen3.5:9b"  # topic relevance is a judgment call, not
+# prose generation — defaults to rank_model when omitted (see config.py), NOT
+# summarize_model. Uncomment to pin it independently of rank_model.
 dedup_model = "ollama/llama3.2"
 # dedup_model = "anthropic/claude-haiku-4-5"  # alternative: local claude CLI
 ad_detector_model = "ollama/ad-detector"

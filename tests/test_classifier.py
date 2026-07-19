@@ -22,7 +22,7 @@ from conftest import EXAMPLE_CONFIG, ollama_has_model
 
 _config = load_config(EXAMPLE_CONFIG)
 _AI_TOPIC = _config.topic("ai")
-_MODEL = _config.models.summarize_model
+_MODEL = _config.models.classify_model
 
 # (expected_relevant, title, summary)
 CASES = [
