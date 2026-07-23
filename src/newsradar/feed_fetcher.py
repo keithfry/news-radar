@@ -12,11 +12,8 @@ from .config import Config
 from .topics import Topic
 
 
-def load_feeds(csv_path: Path, topic: Topic) -> list[dict]:
-    """Load verified feeds filtered by topic category.
-
-    Includes rows with Category == topic.feed_category or Category == "Both".
-    """
+def load_feeds(csv_path: Path) -> list[dict]:
+    """Load verified feeds from a topic's feeds CSV."""
     feeds = []
     with open(csv_path, newline="", encoding="utf-8") as f:
         reader = csv.DictReader(f)
@@ -27,9 +24,7 @@ def load_feeds(csv_path: Path, topic: Topic) -> list[dict]:
             source = row.get("Company / Source", "").strip()
             if not url or not source:
                 continue
-            category = row.get("Category", "AI").strip()
-            if category == topic.feed_category or category == "Both":
-                feeds.append({"source": source, "feed_url": url})
+            feeds.append({"source": source, "feed_url": url})
     return feeds
 
 
@@ -88,8 +83,8 @@ def fetch_all_feeds(
 
     Args:
         config: loaded Config, provides the default feeds_csv path and pipeline defaults.
-        topic:  Topic to filter feeds by (Category column). Uses topic.feeds_csv
-                instead of config.feeds_csv if the topic overrides it.
+        topic:  Topic whose feeds to fetch. Uses topic.feeds_csv instead of
+                config.feeds_csv if the topic overrides it.
         hours:  Lookback window in hours (defaults to config.pipeline.lookback_hours).
         as_of:  Upper bound for item publication time (defaults to now).
 
@@ -100,7 +95,7 @@ def fetch_all_feeds(
     if hours is None:
         hours = config.pipeline.lookback_hours
 
-    feeds = load_feeds(topic.feeds_csv or config.feeds_csv, topic)
+    feeds = load_feeds(topic.feeds_csv or config.feeds_csv)
     reference = as_of or datetime.now(timezone.utc)
     cutoff = reference - timedelta(hours=hours)
 

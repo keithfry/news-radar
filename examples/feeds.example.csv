@@ -1,15 +1,15 @@
-Company / Source,Verified,Feed URL,Summary,Category
-MIT Technology Review - AI & Emerging Tech,Y,https://www.technologyreview.com/feed/,"Editorial coverage of AI, automation, and emerging tech with a focus on societal impact.",Both
-OpenAI - News,Y,https://openai.com/news/rss.xml,"Official OpenAI announcements, model updates, and policy/research posts.",AI
-Google DeepMind Blog,Y,https://deepmind.google/blog/rss.xml,"Research-focused posts on RL, agents, alignment, and frontier AI work.",Both
-NVIDIA Blog,Y,https://blogs.nvidia.com/feed/,"AI, GPUs, and accelerated computing stories for business and developers.",Both
-Hugging Face Blog,Y,https://huggingface.co/blog/feed.xml,"Model releases, research, and community updates from the leading open-source AI platform.",AI
-Simon Willison's Weblog,Y,https://simonwillison.net/atom/everything/,"Prolific commentary on AI tools, LLM capabilities, security, and developer practice.",AI
-arXiv - cs.AI,Y,https://arxiv.org/rss/cs.AI,"Firehose of new papers on AI theory, agents, and planning. Limit to 10 most recent.",AI
-arXiv - cs.RO,Y,https://arxiv.org/rss/cs.RO,"Robotics research papers on manipulation, navigation, HRI, and autonomous systems. Limit to 10 most recent.",Robotics
-MIT News - Robotics,Y,https://news.mit.edu/topic/mitrobotics-rss.xml,"Research news and breakthroughs in robotics from MIT labs and faculty.",Robotics
-The Robot Report,Y,https://www.therobotreport.com/feed/,"Industry news, product launches, and analysis covering the robotics and autonomous systems space.",Robotics
-IEEE Spectrum - Robotics,Y,https://spectrum.ieee.org/feeds/topic/robotics.rss,"Robotics coverage from IEEE Spectrum: humanoids, industrial robots, research, and automation trends.",Robotics
-Humanoids Daily,Y,https://www.humanoidsdaily.com/feed.xml,"Focused coverage of humanoid robot companies, research, and commercial deployments.",Robotics
-Planet ROS,Y,https://planet.ros.org/rss20.xml,"Aggregated feed of ROS developer and community blogs covering ROS 1 and ROS 2 development.",Robotics
-Robohub,Y,https://robohub.org/feed/,"Research-focused robotics news, interviews, and academic coverage from the robotics community.",Robotics
+Company / Source,Verified,Feed URL,Summary
+MIT Technology Review - AI & Emerging Tech,Y,https://www.technologyreview.com/feed/,"Editorial coverage of AI, automation, and emerging tech with a focus on societal impact."
+OpenAI - News,Y,https://openai.com/news/rss.xml,"Official OpenAI announcements, model updates, and policy/research posts."
+Google DeepMind Blog,Y,https://deepmind.google/blog/rss.xml,"Research-focused posts on RL, agents, alignment, and frontier AI work."
+NVIDIA Blog,Y,https://blogs.nvidia.com/feed/,"AI, GPUs, and accelerated computing stories for business and developers."
+Hugging Face Blog,Y,https://huggingface.co/blog/feed.xml,"Model releases, research, and community updates from the leading open-source AI platform."
+Simon Willison's Weblog,Y,https://simonwillison.net/atom/everything/,"Prolific commentary on AI tools, LLM capabilities, security, and developer practice."
+arXiv - cs.AI,Y,https://arxiv.org/rss/cs.AI,"Firehose of new papers on AI theory, agents, and planning. Limit to 10 most recent."
+arXiv - cs.RO,Y,https://arxiv.org/rss/cs.RO,"Robotics research papers on manipulation, navigation, HRI, and autonomous systems. Limit to 10 most recent."
+MIT News - Robotics,Y,https://news.mit.edu/topic/mitrobotics-rss.xml,Research news and breakthroughs in robotics from MIT labs and faculty.
+The Robot Report,Y,https://www.therobotreport.com/feed/,"Industry news, product launches, and analysis covering the robotics and autonomous systems space."
+IEEE Spectrum - Robotics,Y,https://spectrum.ieee.org/feeds/topic/robotics.rss,"Robotics coverage from IEEE Spectrum: humanoids, industrial robots, research, and automation trends."
+Humanoids Daily,Y,https://www.humanoidsdaily.com/feed.xml,"Focused coverage of humanoid robot companies, research, and commercial deployments."
+Planet ROS,Y,https://planet.ros.org/rss20.xml,Aggregated feed of ROS developer and community blogs covering ROS 1 and ROS 2 development.
+Robohub,Y,https://robohub.org/feed/,"Research-focused robotics news, interviews, and academic coverage from the robotics community."

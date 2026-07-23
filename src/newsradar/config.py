@@ -126,7 +126,6 @@ def _load_topic_file(topic_path: Path, base_models: ModelsConfig) -> Topic:
     kwargs = dict(
         name=t["name"],
         display_name=t.get("display_name", t["name"]),
-        feed_category=t.get("feed_category", t["name"]),
         output_dir=t.get("output_dir", t["name"]),
         file_prefix=t.get("file_prefix", f"{t['name']}-radar"),
         classifier_prompt=t["classifier_prompt"],

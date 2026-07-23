@@ -25,7 +25,6 @@ class Topic:
 
     name: str
     display_name: str
-    feed_category: str
     output_dir: str
     file_prefix: str
     classifier_prompt: str

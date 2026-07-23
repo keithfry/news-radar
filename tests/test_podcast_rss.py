@@ -18,7 +18,6 @@ from newsradar.topics import Topic
 _TOPIC = Topic(
     name="ai",
     display_name="AI",
-    feed_category="AI",
     output_dir="ai",
     file_prefix="ai-radar",
     classifier_prompt="unused in these tests",

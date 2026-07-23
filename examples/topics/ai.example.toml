@@ -1,12 +1,9 @@
-# One topic per file. feed_category must match a value in the "Category"
-# column of feeds.csv (or "Both", which is included in every topic).
-# classifier_prompt is the full LLM instruction block used to decide whether
-# an item belongs in this topic's digest.
+# One topic per file. classifier_prompt is the full LLM instruction block
+# used to decide whether an item belongs in this topic's digest.
 
 [topic]
 name = "ai"
 display_name = "AI"
-feed_category = "AI"
 output_dir = "ai"
 file_prefix = "ai-radar"
 fail_open = true  # on LLM parse failure, keep the item (matches original AI behavior)

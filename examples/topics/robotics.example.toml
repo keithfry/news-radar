@@ -1,7 +1,6 @@
 [topic]
 name = "robotics"
 display_name = "Robotics"
-feed_category = "Robotics"
 output_dir = "robotics"
 file_prefix = "robotics-radar"
 fail_open = false  # on LLM parse failure, drop the item (matches original Robotics behavior)
