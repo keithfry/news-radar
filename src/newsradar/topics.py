@@ -3,6 +3,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .config import ModelsConfig
 
 
 @dataclass
@@ -13,6 +18,9 @@ class Topic:
     piece of content belongs in this topic's digest (criteria + examples). keywords
     is an optional fast-path: if non-empty, content matching none of the keywords
     skips straight to the LLM classifier rather than being auto-accepted/rejected.
+
+    models and feeds_csv are optional per-topic overrides of the base config's
+    values — None means "use the base config's value" (see config.effective_models).
     """
 
     name: str
@@ -23,6 +31,8 @@ class Topic:
     classifier_prompt: str
     keywords: list[str] = field(default_factory=list)
     fail_open: bool = True
+    models: "ModelsConfig | None" = None
+    feeds_csv: Path | None = None
 
     # Cover-image theme (RGB tuples). Defaults match the original "AI" blue theme.
     accent_color: tuple[int, int, int] = (96, 165, 250)       # #60a5fa

@@ -19,10 +19,12 @@ author_email = "jane@example.com"
 # public_path_prefix = ""
 
 [models]
-# "provider/model" — provider defaults to ollama if omitted, so bare names
-# like "llama3.2" work too. Any Ollama model you've pulled locally
-# (`ollama pull <name>`) works; "anthropic/<model>" shells out to a local
-# `claude` CLI instead — see docs/SETUP.md.
+# Base/default models — any topic file can override a subset of these in its
+# own [models] table (see examples/topics/ai.example.toml). "provider/model" —
+# provider defaults to ollama if omitted, so bare names like "llama3.2" work
+# too. Any Ollama model you've pulled locally (`ollama pull <name>`) works;
+# "anthropic/<model>" shells out to a local `claude` CLI instead — see
+# docs/SETUP.md.
 summarize_model = "ollama/llama3.2"
 rank_model = "ollama/qwen3.5:9b"
 # classify_model = "ollama/qwen3.5:9b"  # topic relevance is a judgment call, not
@@ -51,102 +53,17 @@ token_path = "secrets/token.json"
 
 [paths]
 output_root = "output"
+# Default feeds.csv, used by any topic that doesn't set its own [paths]
+# feeds_csv override (see examples/topics/*.example.toml).
 feeds_csv = "feeds.csv"
 
 # --- Topics -----------------------------------------------------------------
-# Each [[topics]] entry defines one digest. feed_category must match a value
-# in the "Category" column of feeds.csv (or "Both", which is included in every
-# topic). classifier_prompt is the full LLM instruction block used to decide
-# whether an item belongs in this topic's digest.
+# Each topic gets its own file — see examples/topics/ai.example.toml and
+# examples/topics/robotics.example.toml. files below are resolved relative to
+# this config file.
 
-[[topics]]
-name = "ai"
-display_name = "AI"
-feed_category = "AI"
-output_dir = "ai"
-file_prefix = "ai-radar"
-fail_open = true  # on LLM parse failure, keep the item (matches original AI behavior)
-
-# Non-empty keywords enable a fast-path: content matching none of these
-# keywords skips straight to the LLM classifier below rather than being
-# auto-accepted. An empty list (see the robotics topic) means every item is
-# always LLM-classified.
-keywords = [
-    "ai", "ml", "llm", "robot", "neural", "machine learning",
-    "deep learning", "language model", "generative", "autonomous vehicle",
-    "reinforcement learning", "transformer model", "diffusion model",
-    "anthropic", "openai", "google deepmind", "nvidia ai", "nvidia cuda",
-    "hugging face",
-]
-
-classifier_prompt = """
-Is the following content specifically about artificial intelligence, machine learning, robotics, or LLMs? Answer YES only if the primary topic is AI/ML/robotics technology.
-
-Answer NO for: travel, lifestyle, product sales, referral programs, real estate, finance, sports, gaming, cloud gaming, advertisements, promotional emails, merchandise listings, gift guides, product catalogs, sponsored content, politics, elections, campaigns, live streams/videos not primarily about AI/ML/robotics, or any tech topic not primarily about AI/ML/robotics.
-
-Example:
-Title: 'Live video with Prof G Media now: Can Dems Take the Senate?'
-→ {"relevant": false}
-
-Answer with a JSON object: {"relevant": true} or {"relevant": false}.
-"""
-
-[[topics]]
-name = "robotics"
-display_name = "Robotics"
-feed_category = "Robotics"
-output_dir = "robotics"
-file_prefix = "robotics-radar"
-fail_open = false  # on LLM parse failure, drop the item (matches original Robotics behavior)
-
-# Intentionally empty — robotics always runs the LLM classifier below rather
-# than using a keyword fast-path. See classifier_prompt for the criteria.
-keywords = []
-
-classifier_prompt = """
-You are a strict robotics content filter. Your job is to decide if an article belongs in a robotics digest. When in doubt, answer NO.
-
-Answer YES only if the article's PRIMARY topic is one of:
-  - Physical robots (humanoids, arms, mobile robots, cobots)
-  - Drones / UAVs / UAS
-  - Robot hardware, actuators, sensors, end-effectors
-  - Industrial automation with physical machinery
-  - Robot operating systems (ROS/ROS2) and robot-specific software
-  - Autonomous vehicles (self-driving cars, AGVs)
-  - Embodied AI where a physical robot is the subject
-  - Robotics research (manipulation, navigation, HRI, SLAM)
-
-Answer NO for ALL of the following — even if they mention robots in passing:
-  - LLMs, chatbots, language models, text/image/audio AI
-  - AI assistants (ChatGPT, Claude, Gemini, Copilot)
-  - Reinforcement learning research with no physical robot
-  - AI policy, regulation, ethics, copyright, deepfakes
-  - Data science, MLOps, model training, quantization, inference
-  - AI in education, healthcare, finance, or business strategy
-  - Newsletter digests about general AI news
-  - Cloud computing, APIs, developer tools (unless robot-specific)
-
-Examples:
-Title: 'Video Friday: Watch This Running Robot Not Fall Down Stairs'
-→ {"relevant": true}
-
-Title: 'AGIBOT Challenge Shifts Embodied AI to Physical Hardware at ICRA'
-→ {"relevant": true}
-
-Title: 'Tokenmaxxing might be dead'
-→ {"relevant": false}
-
-Title: 'Fix Your RL Environment Or Risk Bad Model Training'
-→ {"relevant": false}
-
-Title: 'Anthropic launches upgraded model for developers'
-→ {"relevant": false}
-
-Title: 'Schools Shift Views on Ban After ChatGPT Panic'
-→ {"relevant": false}
-
-Answer with JSON only: {"relevant": true} or {"relevant": false}.
-"""
+[topics]
+files = ["topics/ai.example.toml", "topics/robotics.example.toml"]
 
 # --- Publish hook -------------------------------------------------------
 # Uncomment to auto-commit + push generated output after each run (skipped

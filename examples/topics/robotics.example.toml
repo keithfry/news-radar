@@ -1,0 +1,56 @@
+[topic]
+name = "robotics"
+display_name = "Robotics"
+feed_category = "Robotics"
+output_dir = "robotics"
+file_prefix = "robotics-radar"
+fail_open = false  # on LLM parse failure, drop the item (matches original Robotics behavior)
+
+# Intentionally empty — robotics always runs the LLM classifier below rather
+# than using a keyword fast-path. See classifier_prompt for the criteria.
+keywords = []
+
+classifier_prompt = """
+You are a strict robotics content filter. Your job is to decide if an article belongs in a robotics digest. When in doubt, answer NO.
+
+Answer YES only if the article's PRIMARY topic is one of:
+  - Physical robots (humanoids, arms, mobile robots, cobots)
+  - Drones / UAVs / UAS
+  - Robot hardware, actuators, sensors, end-effectors
+  - Industrial automation with physical machinery
+  - Robot operating systems (ROS/ROS2) and robot-specific software
+  - Autonomous vehicles (self-driving cars, AGVs)
+  - Embodied AI where a physical robot is the subject
+  - Robotics research (manipulation, navigation, HRI, SLAM)
+
+Answer NO for ALL of the following — even if they mention robots in passing:
+  - LLMs, chatbots, language models, text/image/audio AI
+  - AI assistants (ChatGPT, Claude, Gemini, Copilot)
+  - Reinforcement learning research with no physical robot
+  - AI policy, regulation, ethics, copyright, deepfakes
+  - Data science, MLOps, model training, quantization, inference
+  - AI in education, healthcare, finance, or business strategy
+  - Newsletter digests about general AI news
+  - Cloud computing, APIs, developer tools (unless robot-specific)
+
+Examples:
+Title: 'Video Friday: Watch This Running Robot Not Fall Down Stairs'
+→ {"relevant": true}
+
+Title: 'AGIBOT Challenge Shifts Embodied AI to Physical Hardware at ICRA'
+→ {"relevant": true}
+
+Title: 'Tokenmaxxing might be dead'
+→ {"relevant": false}
+
+Title: 'Fix Your RL Environment Or Risk Bad Model Training'
+→ {"relevant": false}
+
+Title: 'Anthropic launches upgraded model for developers'
+→ {"relevant": false}
+
+Title: 'Schools Shift Views on Ban After ChatGPT Panic'
+→ {"relevant": false}
+
+Answer with JSON only: {"relevant": true} or {"relevant": false}.
+"""

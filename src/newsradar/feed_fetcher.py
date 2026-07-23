@@ -87,8 +87,9 @@ def fetch_all_feeds(
     """Fetch verified feeds for the given topic.
 
     Args:
-        config: loaded Config, provides feeds_csv path and pipeline defaults.
-        topic:  Topic to filter feeds by (Category column).
+        config: loaded Config, provides the default feeds_csv path and pipeline defaults.
+        topic:  Topic to filter feeds by (Category column). Uses topic.feeds_csv
+                instead of config.feeds_csv if the topic overrides it.
         hours:  Lookback window in hours (defaults to config.pipeline.lookback_hours).
         as_of:  Upper bound for item publication time (defaults to now).
 
@@ -99,7 +100,7 @@ def fetch_all_feeds(
     if hours is None:
         hours = config.pipeline.lookback_hours
 
-    feeds = load_feeds(config.feeds_csv, topic)
+    feeds = load_feeds(topic.feeds_csv or config.feeds_csv, topic)
     reference = as_of or datetime.now(timezone.utc)
     cutoff = reference - timedelta(hours=hours)
 

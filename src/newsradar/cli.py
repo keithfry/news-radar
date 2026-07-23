@@ -31,7 +31,7 @@ from zoneinfo import ZoneInfo
 ET = ZoneInfo("America/New_York")
 
 from .article_fetcher import enrich_with_full_text, fetch_article_text, fetch_article_text_and_title, source_name_from_url
-from .config import Config, load_config
+from .config import Config, effective_models, load_config
 from .email_fetcher import _get_credentials, fetch_emails
 from .enricher import enrich, write_enriched_json
 from .feed_fetcher import fetch_all_feeds, is_arxiv
@@ -111,6 +111,7 @@ def _is_webinar_summary(summary: str) -> bool:
 
 
 def _process_one(idx: int, total: int, item: dict, source_type: str, topic: Topic, config: Config) -> dict | None:
+    models = effective_models(config, topic)
     title = item.get("title", "").strip()
     existing_text = item.get("body") or item.get("summary", "")
     label = item.get("source", "unknown")
@@ -127,8 +128,8 @@ def _process_one(idx: int, total: int, item: dict, source_type: str, topic: Topi
         log(f"    [{idx}] → skip (advertisement)")
         return None
 
-    if config.models.ad_gate_enabled:
-        is_ad, ad_reason = classify_ad(title, existing_text[:1000], config.models.ad_detector_model)
+    if models.ad_gate_enabled:
+        is_ad, ad_reason = classify_ad(title, existing_text[:1000], models.ad_detector_model)
         if is_ad:
             log(f"    [{idx}] → skip (ad gate: {ad_reason})")
             return None
@@ -137,20 +138,20 @@ def _process_one(idx: int, total: int, item: dict, source_type: str, topic: Topi
 
     if not any(kw in lowered for kw in topic.keywords):
         log(f"    [{idx}] → classifying with LLM (no {topic.display_name} keywords matched)...")
-        if not classify_topic(title, existing_text[:500], config.models.classify_model, topic):
+        if not classify_topic(title, existing_text[:500], models.classify_model, topic):
             log(f"    [{idx}] → skip (not {topic.display_name}-related)")
             return None
         log(f"    [{idx}] → classified as {topic.display_name}-related")
 
     log(f"    [{idx}] → summarizing...")
-    summary_text = summarize(title, existing_text, config.models.summarize_model)
+    summary_text = summarize(title, existing_text, models.summarize_model)
 
     if _is_webinar_summary(summary_text):
         log(f"    [{idx}] → skip (webinar/promotional event)")
         return None
 
     log(f"    [{idx}] → tagging...")
-    tags = tag(title, summary_text, config.models.summarize_model)
+    tags = tag(title, summary_text, models.summarize_model)
     log(f"    [{idx}] → done  tags={tags}")
 
     return {
@@ -262,6 +263,7 @@ def _run_topic(
 ) -> list[Path]:
     email_items = email_items or []
     linked_articles = linked_articles or []
+    models = effective_models(config, topic)
 
     base_dir = config.output_root / topic.output_dir
     output_dir = base_dir / as_of.strftime("%Y-%m")
@@ -273,10 +275,10 @@ def _run_topic(
     log(f"Lookback:        {args.hours}h")
     log(f"Topic:           {topic.name}")
     log(f"Output dir:      {output_dir}")
-    log(f"Summarize model: {config.models.summarize_model}")
-    log(f"Rank model:      {config.models.rank_model}")
-    log(f"Classify model:  {config.models.classify_model}")
-    log(f"Dedup model:     {config.models.dedup_model}")
+    log(f"Summarize model: {models.summarize_model}")
+    log(f"Rank model:      {models.rank_model}")
+    log(f"Classify model:  {models.classify_model}")
+    log(f"Dedup model:     {models.dedup_model}")
     log(f"LLM workers:     {config.pipeline.llm_workers}  (set OLLAMA_NUM_PARALLEL={config.pipeline.llm_workers} to match)")
     log(f"URL workers:     {config.pipeline.url_workers}")
     log(f"Dry run:         {args.dry_run}")
@@ -408,7 +410,7 @@ def _run_topic(
     # --- Step 5: Deduplicate ---
     log(f"── Step 5: Deduplicating {len(all_items)} items "
         f"({len(processed_emails)} newsletters + {len(processed_links)} linked + {len(processed_rss)} RSS) ──")
-    all_items = deduplicate(all_items, config.models.dedup_model)
+    all_items = deduplicate(all_items, models.dedup_model)
     log(f"  {len(all_items)} items after deduplication")
     log("")
 
@@ -419,8 +421,8 @@ def _run_topic(
         all_items,
         as_of,
         json_path,
-        summarize_model=config.models.summarize_model,
-        rank_model=config.models.rank_model,
+        summarize_model=models.summarize_model,
+        rank_model=models.rank_model,
         topic=topic,
         llm_workers=config.pipeline.llm_workers,
         log=log,

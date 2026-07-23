@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import os
 import tomllib
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields, replace
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -87,6 +87,15 @@ class Config:
             ) from None
 
 
+def effective_models(config: "Config", topic: Topic) -> ModelsConfig:
+    """A topic's models, layered over the base config's models.
+
+    A topic file's [models] table only needs to set the fields it wants to
+    override; anything it omits falls back to config.models.
+    """
+    return topic.models if topic.models is not None else config.models
+
+
 def _resolve_path(base: Path, value: str) -> Path:
     p = Path(value).expanduser()
     return p if p.is_absolute() else (base / p)
@@ -96,6 +105,48 @@ def _bool_env(env_value: str | None, default: bool) -> bool:
     if env_value is None:
         return default
     return env_value not in ("0", "false", "False", "no")
+
+
+_MODELS_FIELDS = {f.name for f in fields(ModelsConfig)}
+
+
+def _load_topic_file(topic_path: Path, base_models: ModelsConfig) -> Topic:
+    """Load a single topic file (a [topic] table, plus optional [models]/[paths] overrides)."""
+    with open(topic_path, "rb") as f:
+        raw = tomllib.load(f)
+
+    t = raw.get("topic")
+    if t is None:
+        raise ValueError(f"Topic file {topic_path} missing required [topic] table")
+    if "name" not in t:
+        raise ValueError(f"Topic file {topic_path} missing required 'name' field")
+    if "classifier_prompt" not in t:
+        raise ValueError(f"Topic {t['name']!r} ({topic_path}) missing required 'classifier_prompt' field")
+
+    kwargs = dict(
+        name=t["name"],
+        display_name=t.get("display_name", t["name"]),
+        feed_category=t.get("feed_category", t["name"]),
+        output_dir=t.get("output_dir", t["name"]),
+        file_prefix=t.get("file_prefix", f"{t['name']}-radar"),
+        classifier_prompt=t["classifier_prompt"],
+        keywords=t.get("keywords", []),
+        fail_open=t.get("fail_open", True),
+    )
+    for field_name in ("accent_color", "accent_color_light", "bg_top_color", "bg_mid_color"):
+        if field_name in t:
+            kwargs[field_name] = tuple(t[field_name])
+
+    models_raw = raw.get("models")
+    if models_raw:
+        overrides = {k: v for k, v in models_raw.items() if k in _MODELS_FIELDS}
+        kwargs["models"] = replace(base_models, **overrides)
+
+    paths_raw = raw.get("paths", {})
+    if "feeds_csv" in paths_raw:
+        kwargs["feeds_csv"] = _resolve_path(topic_path.parent, paths_raw["feeds_csv"])
+
+    return Topic(**kwargs)
 
 
 def load_config(config_path: str | Path, env_file: str | Path | None = None) -> Config:
@@ -163,30 +214,13 @@ def load_config(config_path: str | Path, env_file: str | Path | None = None) -> 
     output_root = _resolve_path(base, paths_raw.get("output_root", "output"))
     feeds_csv = _resolve_path(base, paths_raw.get("feeds_csv", "feeds.csv"))
 
-    topics_raw = raw.get("topics", [])
-    if not topics_raw:
-        raise ValueError(f"Config {config_path} defines no [[topics]] entries")
+    topic_files = raw.get("topics", {}).get("files", [])
+    if not topic_files:
+        raise ValueError(f"Config {config_path} defines no [topics] files = [...]")
 
     topics: dict[str, Topic] = {}
-    for t in topics_raw:
-        if "name" not in t:
-            raise ValueError(f"Topic entry missing required 'name' field: {t}")
-        if "classifier_prompt" not in t:
-            raise ValueError(f"Topic {t['name']!r} missing required 'classifier_prompt' field")
-        kwargs = dict(
-            name=t["name"],
-            display_name=t.get("display_name", t["name"]),
-            feed_category=t.get("feed_category", t["name"]),
-            output_dir=t.get("output_dir", t["name"]),
-            file_prefix=t.get("file_prefix", f"{t['name']}-radar"),
-            classifier_prompt=t["classifier_prompt"],
-            keywords=t.get("keywords", []),
-            fail_open=t.get("fail_open", True),
-        )
-        for field_name in ("accent_color", "accent_color_light", "bg_top_color", "bg_mid_color"):
-            if field_name in t:
-                kwargs[field_name] = tuple(t[field_name])
-        topic = Topic(**kwargs)
+    for rel_path in topic_files:
+        topic = _load_topic_file(_resolve_path(base, rel_path), models)
         topics[topic.name] = topic
 
     publish_hook = raw.get("publish", {}).get("hook")
