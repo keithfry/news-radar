@@ -18,6 +18,7 @@ from .enricher import KOKORO_VOICES
 from .topics import Topic
 
 _tts_thread_local = threading.local()
+_ESPEAK_LOCK = threading.Lock()
 
 
 def _get_pipeline():
@@ -88,12 +89,13 @@ def _tts_segment(text: str, voice: str, out_wav: Path) -> float:
     import soundfile as sf
     import numpy as np
 
-    pipeline = _get_pipeline()
     audio_chunks = []
     sample_rate = 24000
 
-    for _, _, audio in pipeline(text, voice=voice):
-        audio_chunks.append(audio)
+    with _ESPEAK_LOCK:
+        pipeline = _get_pipeline()
+        for _, _, audio in pipeline(text, voice=voice):
+            audio_chunks.append(audio)
 
     if not audio_chunks:
         raise RuntimeError(f"Kokoro produced no audio for text: {text[:50]!r}")

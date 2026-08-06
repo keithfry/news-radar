@@ -281,6 +281,7 @@ def _run_topic(
     log(f"Dedup model:     {models.dedup_model}")
     log(f"LLM workers:     {config.pipeline.llm_workers}  (set OLLAMA_NUM_PARALLEL={config.pipeline.llm_workers} to match)")
     log(f"URL workers:     {config.pipeline.url_workers}")
+    log(f"TTS workers:     {config.pipeline.tts_workers}")
     log(f"Dry run:         {args.dry_run}")
     log("")
 
@@ -429,6 +430,9 @@ def _run_topic(
     )
     podcast_count = len([i for i in enriched_data["items"] if i.get("include_in_podcast")])
     log(f"  Enrichment complete — {podcast_count} podcast items")
+    log("")
+
+    _stop_models(log)
     log("")
 
     # --- Steps 7a + 7b: Generate HTML and podcast in parallel ---

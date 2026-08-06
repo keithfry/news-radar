@@ -12,7 +12,8 @@ import random
 from pathlib import Path
 
 _PACKAGE_DIR = Path(__file__).parent
-_DEFAULT_DATA_PATH = _PACKAGE_DIR / "test_data" / "labeled_examples.json"
+_REPO_ROOT = _PACKAGE_DIR.parent.parent.parent
+_DEFAULT_DATA_PATH = _REPO_ROOT / "tests" / "test_data" / "labeled_examples.json"
 _DEFAULT_MODELFILE_PATH = _PACKAGE_DIR / "AdDetectorModelfile"
 MAX_EXAMPLES = 25  # per class
 

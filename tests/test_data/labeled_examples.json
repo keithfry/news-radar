@@ -241,6 +241,26 @@
       "is_ad": false,
       "ad_type": "not_ad",
       "notes": "Off-topic but not an ad. Quirky content from The Hustle newsletter. No CTA, no product pitch."
+    },
+    {
+      "id": "google-play-points-comic-con-2026-07-24",
+      "title": "Play Points members and comic book fans can score exclusive rewards with Google Play",
+      "summary": "Play Points members, including comic book fans, can score exclusive rewards such as point boosters and limited-edition gear through the Google Play app or by visiting The Auction by Google Play in San Diego from July 23 to 25. Gold members can unlock digital reward cases for points and collectibles, while all members can redeem points for unique gaming gear. Members also receive priority entry, bonus tokens, and exclusive rewards when they visit the event in person.",
+      "source": "Google / Google AI (Keyword Blog)",
+      "link": "https://blog.google/products-and-platforms/platforms/google-play/comic-con-san-diego/",
+      "is_ad": true,
+      "ad_type": "product_feature_disguised",
+      "notes": "Loyalty-program promo dressed as blog content. Rewards/points CTA, event promo, no AI relevance — slipped through gate on 2026-07-24 AI radar."
+    },
+    {
+      "id": "nvidia-ai-summit-korea-2026-07-24",
+      "title": "At AI Summit, South Korea Outlines Its AI Future With NVIDIA and Partners",
+      "summary": "South Korean President Jae Myung Lee and business leaders are meeting with NVIDIA and ecosystem partners to chart Korea's AI progress. A joint AI research lab was announced between NVIDIA and KAIST, focused on advancing agentic AI for South Korea. The collaboration will bring together NVIDIA expertise and KAIST scientific talent.",
+      "source": "NVIDIA Blog",
+      "link": "https://blogs.nvidia.com/blog/ai-summit-korea-partners-and-nvidia/",
+      "is_ad": false,
+      "ad_type": "not_ad",
+      "notes": "Real news item from same digest run, adjacent card to the Play Points ad. Balances the new ad example."
     }
   ]
 }
