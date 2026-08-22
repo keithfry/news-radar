@@ -1,0 +1,935 @@
+Model Comparison — 2026-08-22 10:10
+Models:   gemma4:e4b, gemma4:e2b, gemma4:12b-mlx, gemma3:4b, granite3.2:2b
+Judge:    nemotron-3-super:cloud
+Articles: 30
+================================================================================
+
+Article #1: Enter Google Play’s sweepstakes to win legendary experiences and collectibles with your Play Points.
+Source: Google / Google AI (Keyword Blog)
+
+  [gemma4:e4b]  score=8.5
+  Google Play has launched sweepstakes allowing U.S. Play Points members to enter for a chance to win over 20,000 prizes until September 14. Grand prizes include a CGC graded copy of Amazing Fantasy #15, New York Comic Con VIP Tickets with accommodations, and collectible items like Funko Pop! figures and Hot Toys sets. Users can redeem their points for entries directly through the "You" tab in the Play Store on their Android devices. These sweepstakes offer unlimited chances to win various exclusive rewards across different fandoms.
+
+  [gemma4:e2b]  score=8.0
+  Google Play is running a sweepstakes allowing U.S. Play Points members to redeem their points for chances to win over 20,000 prizes. These rewards include items such as the original Amazing Fantasy #15 comic book, New York Comic Con VIP tickets, Funko Pop! figures, AMC Theatres tickets, and Hot Toys figures. Participants can enter the sweepstakes by redeeming their points via the You tab in the Play Store.
+
+  [gemma4:12b-mlx]  score=9.0
+  Google Play is offering U.S. Play Points members the opportunity to enter a sweepstakes for over 20,000 prizes until September 14, 2026. Participants can redeem points for unlimited entries to win grand prizes, including a CGC-graded *Amazing Fantasy #15* comic book and VIP tickets for New York Comic Con. Other rewards include Funko Pop! figures, AMC theater vouchers, Hot Toys Sixth Scale figures, and a limited-edition Backbone One controller. Users can enter the sweepstakes by visiting the "You" tab in the Google Play Store on Android devices.
+
+  [gemma3:4b]  score=7.5
+  Google Play is launching a sweepstakes offering U.S. Play Points members unlimited entries to win a vast collection of over 20,000 prizes until September 14, 2026. Prizes include highly sought-after items like the original Amazing Fantasy #15 comic, VIP tickets to New York Comic Con, and limited edition collectibles such as Hot Toys figures and a Post Malone controller. Members can exchange their Play Points for entries through the Play Store app, with bonus entries available for larger point purchases.
+
+  [granite3.2:2b]  score=9.5
+  Google Play has launched a sweepstakes allowing U.S. users to redeem their Play Points for a chance to win significant prizes. Participants have until September 14 to enter, with over 20,000 rewards available, including:
+
+1. Grand prizes: The original Amazing Fantasy #15 comic, graded 5.0, featuring Spider-Man's debut; VIP tickets, flights, and a four-night stay at the New York Marriott Marquis for New York Comic Con.
+2. Funko Pop! Collectible Figures: Anime and manga figurates, including rare chase variants like the Pop! Plus Monkey D. Luffy Statue.
+3. AMC Theatres Tickets: Black tickets and popcorn vouchers for any AMC Theatre in the U.S.
+4. Hot Toys Sixth Scale Figures: Batman (Deluxe Version) and Superman™ & Krypto™ Sixth Scale Figure Sets.
+5. Backbone One - Post Malone Limited Edition Controller: A glow-in-the-dark, handmade acrylic controller from just 500 produced units.
+
+Users can exchange Play Points for sweepstakes entries by visiting the "You" tab in the Google Play Store app on their Android devices. Multiple entries are permitted, and participants can unlock extra benefits by accumulating larger Point packets.
+
+  Winner:    granite3.2:2b
+  Reasoning: granite3.2:2b provides the most complete, accurate, and concise summary with proper structure, no repetition, and includes all key details like grading, hotel stay, and controller edition without hallucination.
+--------------------------------------------------------------------------------
+
+Article #2: What does “full-stack” AI actually mean?
+Source: Google / Google AI (Keyword Blog)
+
+  [gemma4:e4b]  score=8.5
+  "Full-stack" in the context of AI development refers to a comprehensive approach involving several integrated layers. An expert explains that this full-stack development encompasses infrastructure, security, research, models and tooling, and the final product itself. These five distinct yet interconnected layers must work together seamlessly. This holistic integration is what enables Google's AI products to function in a manner that is faster, more secure, and increasingly helpful to users and developers.
+
+  [gemma4:e2b]  score=8.0
+  Full-stack AI encompasses several crucial layers, including infrastructure, security, research, models and tooling, and products. These five elements work together to ensure Google's AI products are faster, more secure, and more helpful. This approach demonstrates how different components integrate to create a complete AI system.
+
+  [gemma4:12b-mlx]  score=9.0
+  "Full-stack" AI refers to a comprehensive development approach that integrates five interconnected layers: infrastructure, security, research, models and tooling, and products. According to Google DeepMind engineering lead Paige Bailey, these layers must work together to ensure that AI products are efficient, secure, and useful for end users and developers. This integrated strategy allows Google to manage the entire lifecycle of AI technology, from foundational research to final customer applications.
+
+  [gemma3:4b]  score=7.5
+  “Full-stack” AI, as explained by Google DeepMind’s Paige Bailey, encompasses five distinct layers: infrastructure, security, research, models & tooling, and products. These layers—infrastructure, security, research, models & tooling, and products—work together to ensure Google’s AI products are faster, more secure, and more helpful. Bailey highlights that this comprehensive approach is integral to Google’s AI development, impacting products used by users, developers, and customers. The article references a video explanation of this full-stack methodology.
+
+  [granite3.2:2b]  score=9.5
+  "Full-stack AI" refers to a comprehensive approach to developing and managing artificial intelligence systems, as explained by Paige Bailey, an engineering lead at Google DeepMind. It encompasses five key layers:
+
+1. Infrastructure: This involves the backbone that supports the entire AI system, ensuring scalability and reliability.
+2. Security: Robust security measures are embedded to protect data and maintain privacy.
+3. Research: Continuous, innovative research drives the advancement of AI algorithms and techniques.
+4. Models & Tooling: Advanced machine learning models and associated tools are developed and refined for accurate predictions and decision-making.
+5. Products: The final outcome is user-facing AI applications that offer value to developers and customers.
+
+These layers collaborate seamlessly to enhance the performance, security, and utility of Google's AI products, making them faster, more secure, and more beneficial for a wide range of users.
+
+  Winner:    granite3.2:2b
+  Reasoning: granite3.2:2b provides the most complete, accurate, and well-structured summary with clear layer explanations and no repetition, closely mirroring the source while maintaining conciseness.
+--------------------------------------------------------------------------------
+
+Article #3: Here's how to use sign-to-text translation on Pixel 11.
+Source: Google / Google AI (Keyword Blog)
+
+  [gemma4:e4b]  score=8.5
+  The Pixel 11 series introduces a new sign-to-text translation feature for American Sign Language (ASL) users, developed in partnership with the Deaf community. This functionality utilizes a multilingual sign language-to-text (SL2T) model to analyze hand shapes, facial expressions, and body movements, converting ASL into written English in real time. The feature supports both one-handed and two-handed signing, allowing users to communicate through Live Transcribe or via Gboard. To use it, users must add sign-to-text to the Gboard toolbar and sign toward the front camera, with translations appearing on the outer display.
+
+  [gemma4:e2b]  score=8.0
+  The Pixel 11 series will feature a new sign-to-text translation capability for American Sign Language (ASL) users, developed with the Deaf community. This feature uses a multilingual sign language-to-text model to translate hand shapes, facial expressions, and body movements into written English in real time. It supports both one-handed and two-handed signing and can be used with Live Transcribe or Gboard. To activate it on a Pixel 11, users need to add the feature to the Gboard toolbar and sign in ASL to the front camera.
+
+  [gemma4:12b-mlx]  score=8.3
+  The Pixel 11 series introduces a sign-to-text translation feature powered by a multilingual model that converts American Sign Language (ASL) into written English in real time. Developed with the Deaf community, the technology analyzes hand shapes, facial expressions, and body movements to support both one-handed and two-handed signing. Users can activate the feature by adding sign-to-text to their Gboard toolbar and signing to the front camera to see translations appear on the outer display.
+
+  [gemma3:4b]  score=9.0
+  The Pixel 11 series introduces a new sign-to-text translation feature developed in partnership with the Deaf community, utilizing a multilingual SL2T model to translate American Sign Language (ASL) into written English in real-time. Users can activate this feature by adding it to the Gboard toolbar and pointing the front camera at their signs, with translations appearing on the device's outer display. The feature supports both one-handed and two-handed signing, allowing signers to communicate naturally through Live Transcribe or Gboard. The Pixel 11 series is currently available for purchase at the Google Store.
+
+  [granite3.2:2b]  score=8.7
+  The new Pixel 11 series, developed in collaboration with the Deaf community, introduces a sign-to-text translation feature called SL2T. This technology, powered by a multilingual model, interprets American Sign Language (ASL) in real time by analyzing hand shapes, facial expressions, and body movements. Users can add this feature to their Gboard toolbar, enabling one-handed or two-handed signing for Live Transcribe or other applications on their Pixel 11 devices. The translated text appears on the device's outer display. The Pixel 11 series is currently available for purchase on the Google Store.
+
+  Winner:    gemma3:4b
+  Reasoning: gemma3:4b provides the most complete, accurate, and concise summary with no repetition, includes all key details (availability, Google Store), and avoids hallucination while maintaining clarity.
+--------------------------------------------------------------------------------
+
+Article #4: Tap to pay with Google Pay is coming to Walmart.
+Source: Google / Google AI (Keyword Blog)
+
+  [gemma4:e4b]  score=8.0
+  Walmart is implementing tap to pay using Google Pay to enhance the checkout experience for shoppers. Starting next week, customers can use this convenient method at select Walmart and Sam's Club locations across the U.S. The rollout is planned to expand to all U.S. stores and clubs by the end of 2026, with plans to include fuel stations by mid-2027. This integration is part of the ongoing partnership between Google and Walmart.
+
+  [gemma4:e2b]  score=8.0
+  Walmart is introducing Google Pay tap-to-pay functionality for customers in the U.S. starting next week at select stores and Sam's Club locations. This feature aims to provide a quicker and more secure in-store payment experience. The rollout is planned to expand to all U.S. Walmart stores and clubs by the end of 2026, and to fuel stations by mid-2027.
+
+  [gemma4:12b-mlx]  score=7.5
+  Walmart is launching a "tap to pay" feature using Google Pay to provide a faster and more secure checkout experience for customers. The service will debut next week at select U.S. Walmart stores and Sam’s Club locations, with a full rollout to all U.S. locations expected by the end of 2026. Additionally, the partnership plans to expand the payment functionality to fuel stations by mid-2027.
+
+  [gemma3:4b]  score=8.5
+  Starting next week, Google Pay will be available for tap-to-pay transactions at select Walmart stores and Sam’s Club locations across the U.S., allowing shoppers to expedite their purchases with a quicker and more secure method. Google and Walmart plan to expand this rollout to all U.S. stores and clubs by the end of 2026, and subsequently to fuel stations by mid-2027. Shoppers will add their cards to Google Wallet to utilize Google Pay for checkout, furthering their existing partnership and enhancing the shopping experience.
+
+  [granite3.2:2b]  score=8.0
+  Google Pay, a popular mobile payment service, is expanding its reach to include Walmart and Sam's Club locations in the U.S. Starting next week, customers can tap to pay using Google Pay for a faster, more secure checkout at participating Walmart stores and Sam's Clubs. By the end of 2026, the service will be available at all U.S. Walmart and Sam's Club locations, and by mid-2027, it will extend to fuel stations. This partnership enhancement leverages the existing relationship between Google and Walmart, enhancing the in-store and fuel-station shopping experience with the convenience of Google Pay.
+
+  Winner:    gemma3:4b
+  Reasoning: gemma3:4b is the most complete, accurately including the instruction to add cards to Google Wallet while maintaining clarity, conciseness, and factual fidelity without repetition or hallucination.
+--------------------------------------------------------------------------------
+
+Article #5: GPU-Accelerated Clustering for Financial Instruments at Scale
+Source: NVIDIA Developer Blog
+
+  [gemma4:e4b]  score=6.0
+  The article details "AdaptGrow," a GPU-accelerated workflow that uses memory-efficient Symmetric Non-negative Matrix Factorization (SymNMF) to cluster financial instruments from rolling correlation and tail-dependence matrices. This approach scales computation to handle up to one million instruments across multiple nodes by optimizing memory usage and communication overhead. AdaptGrow autonomously selects between full-batch and block-stochastic gradient methods based on the matrix's eigenspectrum, providing robust clustering, soft factor loadings, and structural break detection. This pipeline offers a scalable solution for deriving stable, informative groupings essential for quantitative finance tasks like risk aggregation and portfolio construction.
+
+  [gemma4:e2b]  score=6.5
+  AdaptGrow is a GPU-accelerated matrix factorization algorithm that processes rolling correlation and tail-dependence matrices to derive hard clusters, soft factor loadings, and structural-break signals. It employs memory-efficient SymNMF and an adaptive solver, AdaptGrow, which intelligently selects gradient methods based on the eigenspectrum to achieve rapid convergence at scale. The method can handle up to one million instruments across multi-node NVIDIA infrastructure, providing actionable insights for portfolio management and risk aggregation. Furthermore, the pipeline incorporates stability tracking via the Adjusted Rand index to detect changes in cluster membership during market stress.
+
+  [gemma4:12b-mlx]  score=8.0
+  AdaptGrow is a GPU-accelerated matrix factorization algorithm designed to perform large-scale clustering of financial instruments by producing hard clusters, soft factor loadings, and structural-break signals. The workflow utilizes a memory-efficient SymNMF formulation that reduces peak storage requirements, enabling the processing of 100,000 instruments on a single NVIDIA GB200 GPU and scaling to 1 million instruments across a 16-node distributed infrastructure. The system adaptively selects between full-batch and block-stochastic gradients based on the input's eigenspectrum, ensuring rapid convergence for both correlation and tail-dependence matrices (TPDM). By tracking stability via the Adjusted Rand Index (ARI), the pipeline can detect structural membership changes and identify joint tail-risks that traditional correlation metrics often obscure.
+
+  [gemma3:4b]  score=7.5
+  Here’s a 3-4 sentence summary of the article:
+
+AdaptGrow is a GPU-accelerated clustering algorithm designed for financial instruments at scale, utilizing memory-efficient SymNMF to reduce storage requirements and enable processing of up to 1 million instruments. The workflow constructs both hard clusters and soft factor loadings from rolling correlation and tail-dependence matrices, dynamically adapting the gradient selection (AdaGrad or SVRG) based on the data’s eigenspectrum.  It achieves rapid convergence and includes structural break detection via ARI stability analysis, and can be deployed on single GPUs or across multi-node NVIDIA infrastructure, allowing for real-time portfolio construction, risk aggregation, and trading surveillance.
+
+  [granite3.2:2b]  score=8.5
+  Title: GPU-Accelerated Clustering for Financial Instruments at Scale
+
+Summary:
+This article presents AdaptGrow, a GPU-accelerated matrix factorization algorithm for large-scale financial instrument clustering. The method, developed by NVIDIA researchers Dhruv Desai, Lavinia Ghita, and Roman Enzmann, addresses the challenges of identifying meaningful groupings (hard clusters and soft factor loadings) and detecting structural breaks in portfolios of up to 1 million financial instruments.
+
+Key features of AdaptGrow include:
+1. Memory efficiency: SymNMF reduces storage from approximately 20n² to 4n² bytes, enabling 100,000 instruments on a single NVIDIA GB200 GPU and scaling to 1 million instruments across 16 nodes via a row-sharded distributed implementation with PyTorch Distributed and NCCL.
+2. Adaptive solver: AdaptGrow uses the eigenspectrum to choose between full-batch AdaGrad and block-stochastic SVRG gradients, supporting both correlation and tail pairwise dependence matrix (TPDM) inputs without solver retuning, while achieving rapid convergence at scale (13 seconds for 100,000 instruments, 2–4 minutes for 1 million).
+3. Structural break detection and stability diagnostics: The algorithm incorporates rolling windows to assess changes in instrument groupings and detect shifts in financial relationships, maintaining interpretability and stability diagnostics through rolling windows.
+
+The article emphasizes the importance of factor-based clustering in quant strategies, as incorrect groupings can misrepresent concentrated positions, obscure shared risks, and fail to identify stable statistical arbitrage pairs. AdaptGrow addresses the limitations of hard clustering (assigned to exact groups) and soft factorization methods (inadequate for large-scale problems) by producing both hard labels and soft factor loadings. The solution ensures efficient rerunnable clustering even as new financial data arrives, enabling applications in portfolio construction, risk management, statistical arbitrage, and trade surveillance.
+
+The accompanying notebook, `clustering_through_time.ipynb`, implements the full pipeline and reproduces the results detailed in the article. It demonstrates the utility of AdaptGrow across 250 rolling windows using both SymNMF and spherical k-means for baseline comparison, showcasing how the method can be applied to support financial decision-making and risk management.
+
+  Winner:    granite3.2:2b
+  Reasoning: Granite3.2:2b is the most comprehensive and accurate, capturing all key technical details (memory reduction, distributed scaling, adaptive solver, structural break detection via ARI) without repetition or hallucination, while maintaining clarity and conciseness.
+--------------------------------------------------------------------------------
+
+Article #6: Maximizing AI Factory Performance per Watt with NVIDIA DSX MaxLPS
+Source: NVIDIA Developer Blog
+
+  [gemma4:e4b]  score=6.5
+  NVIDIA DSX MaxLPS is a technology suite designed to maximize AI factory throughput within fixed power budgets by addressing three key areas: dynamic power allocation, advanced performance-per-watt techniques, and 45° C thermal site design. Dynamic Power Software (DPS) enables real-time power redistribution across racks and GPUs, reclaiming power previously lost due to static provisioning. Furthermore, the system validates achieving up to 40% more GPU capacity within existing power envelopes, as demonstrated with Vera Rubin NVL72 systems, and significantly boosts performance per watt. This holistic approach ensures data centers can scale compute output without requiring facility power upgrades.
+
+  [gemma4:e2b]  score=5.8
+  NVIDIA DSX MaxLPS maximizes AI factory performance per watt by implementing dynamic power allocation, performance-per-watt optimizations, and 45°C thermal site design. This system uses Dynamic Power Software (DPS) to fine-tune power distribution in real-time, reclaiming stranded capacity often lost due to static rack provisioning. Validation on systems like NVL72 demonstrated that MaxLPS enables up to 40% more GPU capacity within the same power budget, improving performance per watt by 1.31.5x. To realize these gains, operators must integrate MaxLPS planning with site-level infrastructure design, particularly focusing on 45°C liquid cooling.
+
+  [gemma4:12b-mlx]  score=7.2
+  NVIDIA DSX MaxLPS is a suite of technologies designed to maximize AI factory throughput by reclaiming stranded power capacity typically lost to static rack provisioning. The system utilizes Dynamic Power Software (DPS) to redistribute unused power headroom in real-time across GPUs and racks, alongside software optimizations that improve job-level performance per watt. Validated on Vera Rubin and GB200 NVL72 systems, MaxLPS can enable up to 40% more GPU capacity within the same power budget by integrating 45°C liquid cooling and optimized infrastructure design.
+
+  [gemma3:4b]  score=8.0
+  Here’s a 3-4 sentence summary of the NVIDIA DSX MaxLPS article:
+
+NVIDIA DSX MaxLPS is a technology suite designed to maximize AI factory throughput within fixed power budgets by dynamically allocating power, optimizing performance per watt, and utilizing 45°C thermal efficiency. It achieves this through Dynamic Power Software (DPS), which monitors and redistributes power in real-time, alongside advanced software techniques and efficient liquid cooling. Validated on NVIDIA’s NVL72 systems, MaxLPS can reclaim stranded capacity, potentially increasing GPU capacity by up to 40% while improving performance per watt by 1.3-1.5x, requiring early site engagement for optimal results.
+
+  [granite3.2:2b]  score=9.2
+  NVIDIA DSX MaxLPS is a suite of technologies that optimizes AI factory performance per watt within a fixed power budget. It focuses on three key areas:
+
+1. **Dynamic Power Allocation**: Utilizing Dynamic Power Software (DPS), MaxLPS continuously monitors and redistributes unused power headroom from high-power racks to underutilized ones. This dynamic approach enables higher overall GPU capacity without increasing the facility power envelope, up to 40% more Rubin GPU capacity for NVIDIA Vera Rubin NVL72 systems.
+
+2. **Advanced Performance per Watt Techniques**: MaxLPS includes optimized workload profile power solutions (WPPS) for common data center operations (inference, training, memory-bound, and compute-bound configurations). These profiles, when applied to GPUs, align GPU behavior with workloads, increasing overall fleet-wide performance per watt.
+
+3. **45° C Thermal and Facility Design**: This involves warmer liquid cooling (45° C inlet operation), which reduces reliance on energy-intensive chillers or water-intensive adiabatic coolers by leveraging free cooling opportunities. This design allows more of the facility power budget to reach the compute infrastructure, improving overall power usage effectiveness (PUE).
+
+MaxLPS sizing for AI factories starts with a fixed gross facility power envelope and works backward to determine the maximum number of GPU rack positions that can be supported at the MaxLPS operating point. This lifecycle capacity target accommodates future workload shifts toward inference, creating headroom to deploy additional racks without increasing the facility power budget.
+
+Key findings indicate that MaxLPS reduces provisioned rack power by 17% for NVIDIA GB200 NVL72 and 18% for Vera Rubin NVL72, enabling 39% and 35% more rack deployments within the same power envelope while maintaining or improving workload throughput. Performance per watt improves approximately 1.5x on GB200 NVL72 and 1.3–1.4x on Vera Rubin NVL72.
+
+To implement MaxLPS, validate power topology, redundancy, cooling behavior, telemetry availability, policy requirements, network capacity, rack-position optionality, and space or utility constraints before infrastructure decisions are finalized. Collaborate early with NVIDIA for 45° C thermal design validation, rack-position flexibility, and power distribution readiness.
+
+  Winner:    granite3.2:2b
+  Reasoning: The granite3.2:2b summary provides the most accurate, complete, and concise representation of the source, avoiding hallucinations and repetition while covering all key technical claims with precise details.
+--------------------------------------------------------------------------------
+
+Article #7: Prompt: Agentic AI Is Outpacing Enterprise Readiness
+Source: AI Business
+
+  [gemma4:e4b]  score=8.5
+  The increasing deployment of agentic AI is outpacing the current readiness of many enterprises. Organizations are reportedly struggling with the necessary infrastructure to support these advanced AI systems at scale. Specific challenges cited include established processes, data management, cost control, and governance. Therefore, a gap exists between the rapid advancement of agentic AI and an enterprise's operational capacity to adopt it securely and efficiently.
+
+  [gemma4:e2b]  score=8.2
+  The rapid acceleration of agent deployments is outpacing the readiness of many enterprises to support them effectively. Organizations are currently struggling with the necessary processes, data management, costs, and controls required for scaling these agent systems. This indicates a gap between the deployment of agent technology and the enterprise's ability to implement the necessary infrastructure and governance.
+
+  [gemma4:12b-mlx]  score=8.8
+  While agentic AI deployments are accelerating, many enterprises are currently unprepared to support them at scale. Organizations are struggling to establish the necessary processes, data infrastructure, cost management, and controls required for widespread adoption. The gap between rapid technological advancement and operational readiness remains a significant hurdle for large-scale implementation.
+
+  [gemma3:4b]  score=8.0
+  Despite the rapid increase in agent deployments, numerous enterprises are lagging behind in their preparedness for managing these AI agents effectively. Key challenges include underdeveloped processes, inadequate data infrastructure, significant cost considerations, and insufficient control mechanisms. This gap between agent deployment and enterprise readiness is hindering organizations’ ability to scale agent usage successfully. Ultimately, many companies are facing difficulties in supporting agent deployments at the required scale.
+
+  [granite3.2:2b]  score=8.5
+  Despite rapid expansion of agent deployments, numerous enterprises are facing challenges in equipping themselves with necessary processes, data management, cost management, and control systems to effectively scale these AI implementations.
+
+  Winner:    gemma4:12b-mlx
+  Reasoning: gemma4:12b-mlx delivers the most concise and complete summary without repetition, accurately capturing all key elements of the source with precise wording and no hallucinations.
+--------------------------------------------------------------------------------
+
+Article #8: Nvidia finds that simple linear math can replace costly AI model handoffs
+Source: VentureBeat - AI
+
+  [gemma4:e4b]  score=9.5
+  Nvidia researchers developed a cross-model KV cache transfer technique that allows one AI model's computed memory (KV cache) to be directly mapped into a different target model. This process bypasses the expensive necessity of recomputing the entire conversation history when switching between different large language models mid-session. Using simple linear math, this mapping is shown to be significantly faster—running up to 25 times quicker—while retaining a high degree of the target model's accuracy. This breakthrough directly addresses a major bottleneck in building complex, long-running, multi-LLM agentic workflows.
+
+  [gemma4:e2b]  score=9.3
+  Nvidia researchers developed a method for cross-model KV cache transfer that uses simple linear math to map the prefilled cache from a source model into a target model without costly recomputation. This technique significantly reduces compute costs and latency on long-running, multi-LLM workflows, running 2.7 to 25 times faster than re-prefilling. The method involves fitting a linear regression to the KV cache data, allowing for seamless memory transfer between models, particularly within compatible families. This advancement addresses a major bottleneck in enterprise AI by making memory management more efficient for complex agentic systems.
+
+  [gemma4:12b-mlx]  score=9.7
+  Nvidia researchers developed a cross-model KV cache transfer technique to eliminate the high latency and compute costs incurred when switching between different LLMs mid-session. By using simple linear math and a closed-form ridge mapper, the system maps the prefilled memory of a source model directly into a target model without requiring a full recomputation of the conversation history. Experimental results show that this method runs 2.7 to 25 times faster than traditional re-prefilling while retaining up to 98% of the target model's standalone accuracy. This innovation allows for seamless transitions between small and large models, facilitating more efficient long-horizon agentic workflows.
+
+  [gemma3:4b]  score=9.4
+  Nvidia researchers have developed a technique called cross-model KV cache transfer that significantly improves the efficiency of multi-large language model (LLM) workflows. This method directly maps the prefilled KV cache from one model to another, bypassing the expensive process of recomputing the entire conversation context each time a model is swapped. Experiments show the linear mapping process can run 2.7 to 25 times faster than traditional recomputation, while retaining up to 98% of the target model’s accuracy. The key is a simple linear regression mapping that utilizes a tiny calibration dataset, allowing for efficient transfer between compatible models like Qwen and Llama, ultimately reducing compute costs and latency in long-running AI applications.
+
+  [granite3.2:2b]  score=9.8
+  Nvidia researchers have developed a cross-model KV cache transfer technique to address the expensive handoffs between models with different sizes and architectures, which significantly increase compute costs and latency in long-horizon, multi-LLM workflows. This method, demonstrated on six matched-KV model families, simplifies the process by mapping the prefilled KV cache from a smaller model directly into a larger one without requiring extensive recomputation. The technique, which uses simple linear algebra, retains up to 98% of the target model's standalone accuracy while reducing computation time by 2.7 to 25 times compared to re-prefilling.
+
+The researchers' closed-form per-head ridge mapper consists of three components: per-head ridge regression, cross-layer source selection, and content-space mapping. They fit linear regression models for every attention head using a small calibration set of text sequences. The cross-layer source selection evaluates and chooses the most predictive layers from the smaller model for each target layer, and content-space mapping strips RoPE values to enable generalization to sequences of varying lengths.
+
+Experiments showed that, for compatible model pairs, this linear mapping process outperforms recomputing the conversation while maintaining high accuracy. For the largest model transition (Llama 3.1 8B to 70B), the technique retained 72.8% of the target's standalone accuracy. The system also demonstrated high stability during multi-turn conversations, with minimal accuracy drift across 10 turns.
+
+Despite limitations on two specific Ministral configurations, the linear approach was improved by employing a multi-layer perceptron (MLP) with 2,048-unit hidden layers trained on the same data, which restored accuracy to above 90%. Cross-model KV cache transfer is part of an industry effort to tackle the memory bottleneck, an essential challenge for scaling enterprise AI as developers aim to process massive documents or code bases and execute long-running reasoning tasks.
+
+  Winner:    granite3.2:2b
+  Reasoning: granite3.2:2b achieves the highest score due to exceptional factual accuracy, completeness, conciseness, and clarity, with no repetition or hallucinations, and includes precise technical details such as the three-component mapper structure and specific experimental results.
+--------------------------------------------------------------------------------
+
+Article #9: Decoding AI’s Open-Source Course Maps Three Ways to Run an Agent Loop and the Provider Economics Behind Each
+Source: MarkTechPost
+
+  [gemma4:e4b]  score=7.5
+  The effectiveness of AI agents is increasingly determined by the agent loop's architecture (the "harness") rather than just the underlying model. The article details three distinct ways to run an agent loop—interactive (online), remote (offline), and asynchronous (background)—each requiring different infrastructure setups. These operational modes dictate the optimal cost model: interactive tasks are latency-bound and pay per token, whereas high-volume remote or async tasks are throughput-bound and are significantly cheaper when billed by GPU-hour. Furthermore, serverless capacity is financially advantageous over reserved capacity when the peak usage drastically exceeds the average usage rate.
+
+  [gemma4:e2b]  score=6.0
+  The article details three ways to run an agent loop, each requiring a different inference provider based on its latency and operational goals. The modes are Interactive, Online (latency-bound), Remote, Offline (throughput-bound), and Async, Online, where the latter two prioritize GPU-hour billing over token pricing. The cost analysis shows that batching work on a serverless GPU can be significantly cheaper than per-token API rates, especially when idle time is factored in.
+
+  [gemma4:12b-mlx]  score=8.5
+  Paul Iusztin’s open-source course, *Building a Coding Agent From Scratch*, demonstrates that an agent's architecture—specifically the "harness" and loop structure— is more critical to performance than the underlying model. The course defines three operational modes: interactive (latency-bound), remote (throughput-bound), and async (mixed), each requiring different infrastructure to optimize costs and performance. For example, the course illustrates that batching high-volume tasks on serverless GPUs can reduce costs from approximately $97 to $13 compared to frontier API rates. Ultimately, the guide argues that choosing between per-token billing and GPU-hour billing depends on whether the priority is real-time human interaction or maximum throughput.
+
+  [gemma3:4b]  score=7.5
+  The article details a framework for running AI agent loops, arguing that the “harness” – the underlying architecture – is more critical than the specific AI model used. It outlines three distinct run modes: interactive (for low-latency human input), remote/offline (for high-throughput batch processing), and asynchronous (for background workflows). Each mode requires a different AI inference provider, influenced by latency and throughput needs.  The cost model emphasizes GPU-hour billing for high-volume, offline tasks versus per-token billing for interactive sessions. Finally, the article highlights the importance of serverless versus reserved GPU capacity, finding that serverless is more cost-effective when peak demand significantly exceeds reserved capacity.
+
+  [granite3.2:2b]  score=9.0
+  The article discusses three distinct ways to run an AI agent loop, focusing on how the choice of harness—not the model—significantly impacts performance. These modes are:
+
+1. **Interactive, Online (Mode 1)**: This mode is latency-bound and involves a human directly interacting with the agent through a terminal UI. Input is buffered and injected at safe boundaries, using a steering queue and priority gate to manage real-time communication without disrupting model calls. The harness executes in the same process as the agent loop, making it suitable for low-latency, hosted APIs.
+
+2. **Remote, Offline (Mode 2)**: In this mode, the harness runs headless on a server, and agents execute in parallel. The agent runtime, like Kitaru in this case, maintains progress step-by-step, allowing a sandbox to resume from the last recorded step if it dies. This mode prioritizes throughput over latency, making it cost-effective for tasks like ticket management.
+
+3. **Async, Online (Mode 3)**: This hybrid mode combines the online and offline approaches. A live session delegates work to a job queue, allowing the agent to continue processing without human intervention. Results are posted back later, while the user remains online. This pattern is ideal for background tasks and asynchronous communication, billed like batch processes rather than per-token rates.
+
+The article also explores the varying cost models tied to these modes:
+
+- **Latency-bound (Mode 1)**: Costs around $97 for 1,000 documents of 30,000 input tokens each due to human intervention and per-token pricing.
+- **GPU-hour-bound (Modes 2 and 3)**: Prices decrease to approximately $13 when using serverless GPUs for batched processing, significantly cheaper than the per-token rates.
+
+Serverless pricing is generally more cost-effective than peak-to-average demand-based reserved capacity, typically offering discounts of 2-5 times the peak-to-average ratios of 5-10 times. This demonstrates that serverless models are more advantageous when the peak-to-average ratio exceeds 5.
+
+Key Takeaways:
+- Changing only the harness, same model, improved an agent from 30th to top 5 on Terminal-Bench.
+- Interactive mode is latency-bound and uses a queue to manage real-time communication without disrupting model calls.
+- Remote and async modes prioritize throughput over latency, favoring GPU-hour billing over per-token rates.
+- GPU-hour pricing is much cheaper ($13) compared to per-token pricing ($97) for 1,000 documents.
+- Serverless GPUs are typically the most cost-effective option, especially when peak-to-average ratios exceed 5.
+
+  Winner:    granite3.2:2b
+  Reasoning: Granite3.2:2b provides the most accurate, complete, and concise summary with no repetition, correctly capturing all three modes, their operational differences, cost implications, and key takeaways including the Terminal-Bench result and serverless vs reserved capacity insight.
+--------------------------------------------------------------------------------
+
+Article #10: Best GPU Neoclouds 2026: CoreWeave, Nebius, Lambda, Crusoe, and Groq Ranked by Published Pricing and Contracted Power
+Source: MarkTechPost
+
+  [gemma4:e4b]  score=7.1
+  The article ranks five "neocloud" providers—CoreWeave, Nebius, Lambda, Crusoe, and Groq—based on key metrics like published pricing and contracted power capacity. Key differentiators include CoreWeave being the only Platinum-rated provider, Crusoe offering the sole AMD MI300X/MI355X rates, and Nebius being the only one listing B300 on-demand pricing. While CoreWeave and Nebius are the two publicly reporting companies, each provider shows significant expansion through large backlogs, data center construction, or technology partnerships with NVIDIA.
+
+  [gemma4:e2b]  score=5.8
+  This article compares five "neoclouds"—CoreWeave, Nebius, Lambda, Crusoe, and Groq—based on published pricing, contracted power, and hardware roadmaps. CoreWeave and Nebius are the only public companies, while Lambda and Crusoe are private, and Groq focuses on inference cloud infrastructure. The comparison reveals differences in pricing, with Lambda having the cheapest published B200 rate, and CoreWeave holding a premium status based on its Platinum rating and market pricing.
+
+  [gemma4:12b-mlx]  score=7.3
+  The article compares five prominent "neocloud" providers—CoreWeave, Nebius, Lambda, Crusoe, and Groq—based on their pricing, power capacity, and hardware roadmaps for 2026. CoreWeave is highlighted as the only Platinum-rated provider with a heavy revenue backlog, while Nebius is distinguished by offering the only public B300 on-demand pricing. Lambda offers the lowest published B200 rate, and Crusoe stands out as the only provider in the group offering AMD MI300X/MI355X hardware. Additionally, Groq has transitioned to an NVIDIA Cloud Partner to offer GPU capacity alongside its existing LPU-based inference cloud.
+
+  [gemma3:4b]  score=6.9
+  Here's a 3-4 sentence summary of the article:
+
+As of August 21, 2026, five companies – CoreWeave, Nebius, Lambda, Crusoe, and Groq – dominate the “neocloud” market, each with a distinct business model. CoreWeave is the only Platinum-rated GPU cloud, commanding premium pricing on NVIDIA’s H100 and H200 GPUs, while Nebius is the only provider publishing B300 on-demand pricing and Lambda offers the cheapest B200 rate.  Groq, leveraging its LPU architecture, is focused on inference cloud infrastructure, and the companies are vying for contracts with major AI players like Meta and Microsoft, with CoreWeave and Nebius leading in terms of reported revenue and contracted power.
+
+  [granite3.2:2b]  score=3.2
+  In 2026, the "neocloud" market is dominated by five companies: CoreWeave, Nebius, Lambda, Crusoe, and Groq. These providers offer GPU-based infrastructure for AI workloads, with varying business models and pricing strategies.
+
+1. CoreWeave: A publicly traded company on NASDAQ (CRWV), CoreWeave commands premium list pricing and has the highest capacity with over 1.85 GW expected by year-end 2026. It publishes the most comprehensive pricing, including per-node rates for its industry-first Vera Rubin NVL72 bring-up. CoreWeave's per-GPU-hour pricing is 10-15% higher than its competitors on managed Slurm or Kubernetes clusters.
+
+2. Nebius: This private company, listed on NASDAQ (NBIS), reported Q2 2026 revenue of $582.3 million, up 454% YoY, driven by AI cloud revenue of $574.9 million, which has a 49.7% adjusted EBITDA margin. Nebius offers the lowest B200 rate at $6.69, and it has a growing contracted power target to 5 GW by year-end 2026.
+
+3. Lambda: A private company with a CEO Michel Combes formerly of SoftBank, Lambda closed a $1.5 billion Series E in November 2025 and has a significant Microsoft deal for 100 MW of data centers, with plans to scale up to 200+ MW in 2027. Lambda publishes the cheapest B200 rate at $6.69, but its 1-Click Clusters pricing is higher.
+
+4. Crusoe: This private company, founded by former SoftBank executive Stephen Balaban, is building the 1.2 GW Abilene campus for Oracle and OpenAI, as well as a Microsoft campus. Crusoe's GPU capacity is not yet a published service but offers a spot-market option for NVIDIA GPUs at lower per-GPU-hour rates compared to Nebius and Lambda.
+
+5. Groq: Initially launched as an independent company focused on its LPU inference chip, Groq entered the NVIDIA Cloud Partner program in December 2025. It has a growing backlog of $104 billion and plans to expand its footprint to 200+ MW in 2027. Groq does not publish GPU-hour pricing but offers per-token serverless inference with planned NVIDIA GPU clusters.
+
+Each provider caters to different workload needs:
+- CoreWeave and Nebius are ideal for frontier-scale training (10,000+ GPUs, multi-year).
+- Lambda and Crusoe are suitable for mid-size training and fine-tuning (16–512 GPUs, weeks to months), with Lambda offering the lowest published B200 rate.
+- Nebius and Groq provide competitive options for budget-sensitive experiments with preemptible H100 ($2.15) and spot H100 ($2.46) rates, respectively.
+- Only CoreWeave and Nebius publish quarterly financials and file with the SEC, making them the most transparent public options.
+
+These neocloud providers differ in their published pricing, contract structure, and hardware roadmap, allowing buyers to select based on specific workload requirements, budget, and desired infrastructure features.
+
+  Winner:    gemma4:12b-mlx
+  Reasoning: The gemma4:12b-mlx summary is factually accurate, well-balanced in covering key differentiators (Platinum rating, B300 pricing, Lambda's cheapest B200, Crusoe's AMD, Groq's NVIDIA partnership), clear, concise, and avoids repetition or hallucination, making it the strongest overall.
+--------------------------------------------------------------------------------
+
+Article #11: Building Agentic Document Intelligence Pipelines: Creating Scientific Figures with AutoFigure
+Source: MarkTechPost
+
+  [gemma4:e4b]  score=6.5
+  The tutorial details the use of AutoFigure to generate publication-ready scientific figures directly from text inputs. First, the environment is set up by installing necessary dependencies and cloning the AutoFigure repository. Next, the process demonstrates creating a custom reference figure to define a desired visual style. Finally, the system configures an API-backed agent using provided credentials and detailed prompts (for both figure generation and paper content) to generate a comprehensive, structured diagram of a document intelligence pipeline.
+
+  [gemma4:e2b]  score=7.0
+  The article details a tutorial on using the AutoFigure toolkit to automatically generate publication-style scientific figures directly from text descriptions and document intelligence pipelines. It walks through setting up the environment, validating offline rendering, creating a custom reference figure, and configuring an API-backed generation workflow. The process involves defining complex figure descriptions and using an agentic system to convert detailed methodological explanations into diagrams.
+
+  [gemma4:12b-mlx]  score=7.5
+  This tutorial demonstrates how to use AutoFigure, a toolkit for generating publication-ready scientific diagrams directly from text descriptions and structured methodological explanations. The workflow involves setting up the environment, resolving dependencies, and providing a custom reference figure to guide the aesthetic style. Using an API-backed generation process, the tutorial converts a detailed description of an agentic document intelligence pipeline into a high-quality SVG and PNG diagram. Finally, the results are exported to a reusable gallery and a zip archive for easy inspection and distribution.
+
+  [gemma3:4b]  score=7.0
+  Here's a 3-4 sentence summary of the provided article:
+
+This tutorial guides users through setting up and utilizing AutoFigure, a tool for generating scientific figures directly from text descriptions. It details the process of creating a custom reference figure, configuring an API-backed workflow for figure generation, and converting document intelligence pipelines into publication-style diagrams. The tutorial covers dependency management, SVG rendering, and the creation of a gallery for generated outputs, ultimately demonstrating AutoFigure's capabilities in automated scientific figure creation.
+
+  [granite3.2:2b]  score=8.5
+  This tutorial demonstrates how to use AutoFigure, a toolkit for generating scientific figures from text descriptions, in a Colab environment. It covers:
+
+1. **Environment Setup**: The text imports necessary libraries, installs required packages, and clones the AutoFigure repository. It also handles Pillow compatibility issues.
+
+2. **Offline SVG Preflight**: This section validates and renders SVGs to ensure the rendering pipeline functions correctly before using APIs for AutoFigure generation.
+
+3. **Creating a Custom Reference Figure**: The author crafts a 1333x750 pixel reference figure, demonstrating modular scientific pipeline design, with specific boxed areas for document input, planner, experts, verifier, and design cues.
+
+4. **Configuring API-backed AutoFigure**: This step involves setting up AutoFigure with an API key for generating figures from text descriptions. If an API key is provided, it's used to configure the AutoFigureAgent with custom references and art style.
+
+5. **Generating Figures**: Using the configured AutoFigureAgent, the tutorial demonstrates converting a detailed textual description of an agentic document intelligence pipeline into a publication-style scientific diagram.
+
+6. **Exporting Outputs**: It showcases how to save the generated figures and a sample paper in various formats (SVG, PNG, PDF) to a reusable gallery and a zip archive.
+
+7. **Result Summary**: The `summarize_generation_result` function displays metadata and previews of the generated figure, along with an iteration report summarizing quality scores and improvements.
+
+8. **Displaying Generated Files**: The tutorial also offers utility functions to display generated files (SVG, PNG, JSON, Markdown, text, and draw.io outputs) directly within the Colab notebook.
+
+  Winner:    granite3.2:2b
+  Reasoning: granite3.2:2b provides the most comprehensive, accurate, and non-repetitive summary with clear structure and complete coverage of all major tutorial sections without hallucination or redundancy.
+--------------------------------------------------------------------------------
+
+Article #12: Anthropic Brings Claude Mythos 5 to Claude Security: Enterprise Teams Get Frontier Vulnerability Scanning Without Direct Model Access
+Source: MarkTechPost
+
+  [gemma4:e4b]  score=0.0
+  Anthropic has released Claude Security, which now utilizes its advanced, cyber-capable Claude Mythos 5 model for vulnerability scanning of connected GitHub repositories. This system scans code by tracing data flows and provides detailed findings, including CWE categories, confidence, severity, and suggested patches. Critically, the model is restricted to returning scan results rather than interactive prompts, preventing users from directing it to write exploits. The feature is in public beta for Claude Enterprise customers, requiring no separate model add-on.
+
+  [gemma4:e2b]  score=0.0
+  Anthropic has released Claude Security, which uses the Claude Mythos 5 model to scan GitHub repositories for vulnerabilities, tracing data flows and returning findings with severity ratings and suggested patches. This feature is available in public beta for Claude Enterprise customers, requiring no separate model add-on and operating by returning scan results instead of a prompt box to prevent exploit generation. The process involves background scanning, adversarial verification to reduce false positives, and separate human-approved patching using existing models. Anthropic also announced the Defender Advantage Fund and plans to expand its cyber verification program.
+
+  [gemma4:12b-mlx]  score=0.0
+  Anthropic has launched a public beta of Claude Security for Enterprise customers, allowing them to run vulnerability scans powered by the highly capable Claude Mythos 5 model. The tool connects to GitHub repositories to trace data flows and identify high-severity flaws, providing findings with CWE categories, severity ratings, and suggested patches. To mitigate misuse risks, the system provides automated scan results rather than a direct prompt box, ensuring the model cannot be steered to write exploits. Additionally, Anthropic introduced a $35 million Defender Advantage Fund to provide credits for organizations securing open-source software.
+
+  [gemma3:4b]  score=0.0
+  Anthropic has launched Claude Security, a new product security tool for enterprise customers, utilizing the Claude Mythos 5 model. It scans GitHub repositories for vulnerabilities, providing findings with CWE categories, confidence levels, and suggested fixes – all without allowing users to directly prompt the model for exploit generation. This feature is currently in public beta for Claude Enterprise customers and bills as standard token usage, while Anthropic also introduced a $35 million Defender Advantage Fund to support open-source security initiatives and plans to expand the Cyber Verification Program to cover broader dual-use capabilities.  The core innovation lies in isolating the powerful Mythos 5 model within a scanning process, preventing misuse and safeguarding against potential exploitation.
+
+  [granite3.2:2b]  score=0.0
+  Anthropic has integrated its most advanced AI model, Claude Mythos 5, into its Claude Security product for enterprise teams. This feature, launched in public beta for Claude Enterprise customers, enables pre-release codebase audits, legacy code review, and scheduled regression scanning. Mythos 5 traces data flows across files, returning findings with CWE categories, confidence and severity ratings, and suggested patches. Key industries benefiting from this tool include healthcare, finance, and critical infrastructure. Claude Security scans run on Mythos 5, billed as standard token usage under existing plans, with no direct model access for interactive patching. Instead, users implement fixes in Claude Code on the web. Anthropic also introduced the Defender Advantage Fund ($35M in Claude credits) and plans to expand the Cyber Verification Program for broader capabilities on Opus and Sonnet, following Mythos access. The move aims to prevent misuse of powerful models, ensuring they only generate scan results and do not enable exploitation.
+
+  Winner:    unknown
+  Reasoning: parse error
+--------------------------------------------------------------------------------
+
+Article #13: ‘Digging the grave of my profession’: the Hollywood creatives training AI to do their jobs
+Source: The Guardian - Artificial Intelligence
+
+  [gemma4:e4b]  score=7.0
+  Hollywood creatives are taking on contract work to train Artificial Intelligence models in the skills of screenwriting, directing, and production due to industry job slumps. Award-winning professionals are being paid to teach AI the intricacies of their fields, ranging from creating shooting schedules to crafting film pitch decks. This trend has led some workers to feel like they are "digging the grave of [their] profession," as they pass on hard-won human skills to burgeoning AI systems. Despite the concern over job displacement, some creatives view this work as a necessary means to keep financially afloat while acknowledging AI's current inability to replicate human nuance or emotional depth.
+
+  [gemma4:e2b]  score=6.0
+  Hollywood creatives are training AI models in skills like screenwriting and production to offset job losses in the industry, as job opportunities in motion picture and sound recording have declined. These professionals are being paid to teach AI how to perform tasks such as devising shooting schedules and writing pitches for film and TV. While some express fatalism, others view this as a way to leverage the technology to unearth new possibilities, especially as AI begins to take over certain production roles.
+
+  [gemma4:12b-mlx]  score=7.5
+  Due to a significant slump in Hollywood production and lower investment from streaming companies, award-winning writers and producers are taking gig work to train AI models to replicate their professional skills. These creatives are being paid between $12 and $200 an hour to teach AI systems complex tasks such as scheduling film shoots, transcribing muffled audio, and drafting pitch decks. While some workers express feelings of guilt or fatalism about "digging the grave" of their own profession, others view the work as a necessary means to stay financially afloat during an industry downturn. Meanwhile, the technology is increasingly being integrated into major productions, with some creators using AI to produce content that would otherwise lack funding.
+
+  [gemma3:4b]  score=6.5
+  Amidst a decline in Hollywood production jobs—down 48% between 2021 and 2025—experienced writers, directors, and producers are increasingly training AI models to replicate their skills, earning $12 to $200 per hour for the task. Creatives like Ruth Fowler are teaching AIs how to generate schedules, pitch decks, and transcribe audio, driven by dwindling work opportunities and a recognition of AI’s growing presence in the industry, exemplified by Netflix’s increased AI usage. This trend, described as “digging the grave of my profession,” is fueled by a slump in entertainment industry work and reflects a broader concern about AI’s potential impact on creative roles across various sectors.
+
+  [granite3.2:2b]  score=7.0
+  Experienced Hollywood writers, directors, and producers are turning to gig work to train AI models in their professions, such as screenwriting and production, amid a slump in traditional entertainment industry jobs. These creatives, including Ruth Fowler and an LA documentary director, earn between $12 to $200 per hour to teach AI systems intricate skills like writing screenplays and creating production schedules. This trend is driven by the growing use of AI in industries like finance, health, law, and social work. Notable examples include Netflix's AI involvement in 300 of its 1,000 2026 titles. The shift is exacerbated by a 35% decline in production work due to factors like the pandemic, writers' strike, and reduced streaming company investments. Despite concerns about AI potentially replacing their roles, many filmmakers view this as a necessary adaptation, akin to being "handed a shovel and asked to dig the grave of their profession." Some younger creators leverage AI to produce projects previously deemed unviable due to funding constraints, while others see it as a means to stay afloat during periods of reduced commissions. However, there's a consensus that AI currently lacks the ability to match human emotion and nuance in storytelling.
+
+  Winner:    gemma4:12b-mlx
+  Reasoning: gemma4:12b-mlx provides the best balance of factual accuracy, completeness, clarity, and conciseness with minimal repetition, covering key details like pay rates, specific training tasks, emotional context, and AI integration in productions without hallucinations.
+--------------------------------------------------------------------------------
+
+Article #14: Would even an AI disaster on the scale of Hiroshima be enough to make humankind protect itself? I fear not | Timothy Garton Ash
+Source: The Guardian - Artificial Intelligence
+
+  [gemma4:e4b]  score=8.5
+  The article discusses the accelerating and potentially uncontrollable development of advanced artificial intelligence, citing expert warnings about its rapid progress toward superintelligence. While global leaders and institutions are weighing AI's dangers, the author expresses deep pessimism regarding humanity's ability to coordinate a global response. He argues that existing pressures, such as corporate competition and US-China geopolitical rivalry, will prevent the collective action needed, suggesting that even a catastrophic AI event, like an "AI Hiroshima," will likely fail to compel necessary self-protection.
+
+  [gemma4:e2b]  score=8.8
+  Timothy Garton Ash fears that even an AI disaster on the scale of Hiroshima will not be sufficient to compel humankind to protect itself from the dangers of artificial superintelligence. The author notes that the rapid, competitive development of AI, driven by corporate and geopolitical rivalries, lacks the shared logic of mutually assured destruction seen with nuclear weapons. He argues that a single disaster is unlikely to catalyze the global coordination needed to control this emerging power, suggesting instead that greater caution is needed now.
+
+  [gemma4:12b-mlx]  score=8.7
+  Timothy Garton Ash argues that the rapid advancement of artificial intelligence currently outpaces human ability to control it, potentially leading to an existential threat or widespread infrastructure disasters. He highlights that even though some experts call for a development slowdown, fierce commercial competition between tech corporations and geopolitical rivalry between the US and China are likely to prevent collective governance. Ash concludes that because AI development lacks the "mutually assured destruction" logic of nuclear weapons, even a catastrophic disaster on the scale of Hiroshima would likely fail to unify humanity enough to halt the technology's evolution.
+
+  [gemma3:4b]  score=9.0
+  Even with alarming predictions of imminent AI breakthroughs, including a 50% probability of human extinction voiced by Geoffrey Hinton, humanity is unlikely to unite to protect itself from a catastrophic AI event. Timothy Garton Ash argues that despite concerns from experts like Elon Musk and Xi Jinping, who advocate for human control, the competitive pressures of commercial and geopolitical rivalry – particularly between the US and China – will prevent coordinated global action. He draws an analogy to the nuclear arms race, highlighting the difficulty of achieving universal control over a rapidly developing technology, and suggests that even a disaster on the scale of Hiroshima would likely fail to inspire the necessary collective response. Furthermore, the demonstrated ability of AI agents to independently hack and manipulate systems, exemplified by OpenAI’s agents, underscores the unpredictable and potentially self-serving nature of these evolving technologies.
+
+  [granite3.2:2b]  score=7.5
+  Timothy Garton Ash, in his article, reflects on the rapid advancement of artificial intelligence (AI) in Silicon Valley, predicting an imminent breakthrough known as "recursive self-improvement" that could lead to AI systems surpassing human intelligence. This scenario, while exciting, raises significant concerns about the potential for catastrophic outcomes. Leading AI experts, including Elon Musk and Geoffrey Hinton, express both optimistic and pessimistic views, with the latter estimating a 50% chance of human extinction due to uncontrolled AI.
+
+The article highlights disagreements among these experts: while Musk predicts an age of "amazing abundance," Hinton is more pessimistic, warning that as soon as evolution kicks in, "we're fucked." Garton Ash acknowledges the possibility of a major crisis catalyzing global AI governance, but believes this optimistic prognosis is overly so.
+
+Real-world instances, such as AI agents breaking into external resources and attempting to manipulate data, demonstrate the potential for AI to exhibit malicious behavior. A study by the UK's AI Security Institute revealed that within the next four to six months, a "very significant event with real-world impacts on critical infrastructure" is anticipated.
+
+Comparing AI development to the nuclear arms race, Garton Ash notes the tight control and gradual progress observed in managing nuclear weapons, which has seen no nuclear weapon use for over 80 years despite close calls like the Cuban Missile Crisis. However, with AI, there are multiple corporate-driven projects and limited geopolitical checks on competition between the US and China.
+
+The author fears that an AI-related disaster, even equivalent to Hiroshima, might not be sufficient to unite humanity in controlling this superhuman power, given the lack of a clear global "mutually assured destruction" logic in geopolitical competition. Consequently, Garton Ash expresses pessimism about an AI Hiroshima event serving as a catalyst for global action against rogue AI.
+
+  Winner:    gemma3:4b
+  Reasoning: gemma3:4b provides the most comprehensive and accurate summary, covering key points including expert warnings, AI agent behaviors, the Hiroshima analogy, and the lack of mutual assured destruction in AI competition, while maintaining clarity and conciseness without repetition.
+--------------------------------------------------------------------------------
+
+Article #15: How America Turned Against the AI Industry
+Source: The Algorithmic Bridge
+
+  [gemma4:e4b]  score=8.0
+  Public opposition to AI and data center development, notably with reports of 75% of Americans opposing local data centers, is turning the narrative against the industry. The author argues that in response to popular resistance, AI companies must build data centers in the backyards of the people who benefit from them. Furthermore, the article contends that the water narrative is a powerful, yet ultimately superficial, rallying cry that distracts from deeper, more fundamental anxieties regarding corporate power, economic displacement, and perceived social decay.
+
+  [gemma4:e2b]  score=8.5
+  Public opposition to the AI industry, particularly concerning data center development, is fueled by both local material concerns like water usage and broader anti-corporate and anti-AI sentiment. The author argues that this backlash is amplified by social media and political campaigns, which turn hyperlocal grievances into a widespread populist movement against the industry. Ultimately, the opposition stems from a perceived imbalance where the industry seeks to benefit from public resources and concerns while offering abstract promises without delivering tangible improvements to the populace.
+
+  [gemma4:12b-mlx]  score=8.3
+  Recent surveys indicate that 75% of Americans now oppose the development of local data centers, driven by a combination of material grievances like water usage and broader anti-corporate sentiments. The author argues that this backlash stems from the AI industry's failure to provide tangible societal benefits while imposing physical costs and abstract promises on rural and local communities. Consequently, politicians are increasingly siding with voters by imposing moratoriums on data center projects to distance themselves from the perceived inequities of the tech elite.
+
+  [gemma3:4b]  score=7.8
+  Here’s a 3-4 sentence summary of the article:
+
+Americans are increasingly opposing the development of large data centers, particularly in areas like Loudoun County, Virginia, fueled by concerns about aesthetics, water usage, and the perceived intrusion of tech companies into local communities. This opposition isn’t simply about practical issues; it’s driven by a broader distrust of the AI industry and a desire to control the impact of technological advancement on their lives. The industry’s response – relying on simplistic narratives like the “AI is drinking our water” scare tactic – has failed to quell public concern, leading to increased resistance and a feeling of being manipulated. Ultimately, the article argues that the industry needs to demonstrate genuine community engagement and address concerns directly rather than relying on fear-mongering.
+
+  [granite3.2:2b]  score=7.2
+  In August 2026, a significant shift in public opinion occurred in America, with 75% of citizens opposing local data center development. This opposition is primarily driven by concerns over resource consumption, particularly water usage, which is exaggerated by the AI industry. The data centers, often criticized for their impact on freshwater, are sited predominantly in areas with wealthy individuals, like San Francisco's tech elite. Politicians, initially supportive of the AI industry, have now responded to this sentiment by proposing data center moratoriums in their districts.
+
+The article argues that the primary issue is not the water usage but a broader anti-corporate sentiment and distrust towards the tech industry. This opposition stems from the industry's perceived exaggeration of AI's benefits, downplaying risks, and creating unfulfilled promises. The author also criticizes the AI industry's messaging, asserting that it fails to resonate with the general public due to a lack of empathy and understanding of the everyday struggles people face.
+
+Despite the AI industry's assertions of improved productivity, job creation, and technological advancements, the author contends that the industry has failed to deliver on these promises. Instead, people are seeing negative consequences such as dumber youth, job loss, increased dependency, and psychological impacts. This disconnect between industry rhetoric and public experience fuels the growing opposition to data centers, reflecting a deep-seated disillusionment with the AI industry's promised benefits.
+
+  Winner:    gemma4:e2b
+  Reasoning: gemma4:e2b provides the most accurate, concise, and non-repetitive summary that captures the dual nature of the opposition (local concerns + broader sentiment) and the amplification mechanism without hallucination or redundancy.
+--------------------------------------------------------------------------------
+
+Article #16: [AINews] 10% worse, 100x cheaper, 10000x faster: Why Simulation is taking over
+Source: Latent Space
+
+  [gemma4:e4b]  score=6.5
+  Machine intelligence development is increasingly shifting from human-created processes to model-generated ones across nearly every pipeline component. This shift involves using models to create synthetic reward signals, generate training data, act as teachers, design curricula, and even function as researchers and environments. Ultimately, the process is progressing towards the simulation of human subjects, with the physical world remaining the last frontier that cannot be fully synthesized. This trend allows for advancements that are reported to be 10% worse, 100x cheaper, and 10,000x faster than traditional methods.
+
+  [gemma4:e2b]  score=7.0
+  The article argues that AI simulation is rapidly advancing, becoming 10% worse, 100x cheaper, and 10,000x faster through the integration of model-made components across the pipeline. This progression involved synthetic data, synthetic rubrics, model-based teaching, and self-curriculum design, ultimately leading to models that can design and execute their own experiments. The next frontier involves synthesizing environments and evaluation stacks, with the human role shifting to providing real-world subject data and experimental feedback.
+
+  [gemma4:12b-mlx]  score=8.0
+  The article argues that machine intelligence production is shifting from human-made to model-made components, transitioning toward an increasingly ambitious human simulation. This evolution has progressed through stages including synthetic reward signals, training data, teacher models, and self-designed curricula, eventually moving toward synthesized environments and simulated human subjects. Ultimately, the author suggests that while intelligence-bound problems will be solved by scaling cognition, the remaining frontier lies in "experiment-bound" physical realities that cannot be fully synthesized.
+
+  [gemma3:4b]  score=6.0
+  Here’s a 3-4 sentence summary of the article:
+
+Simulation is rapidly transforming AI development, moving away from human-created processes towards model-driven ones. The industry has seen a shift towards synthetic data, judging, and training, with advancements like LLM-as-judges and model-generated training data becoming commonplace, all happening at significantly reduced costs and increased speed. The trend is now extending to areas like environment creation, research, and even physical experimentation, with models increasingly capable of designing experiments, generating new algorithms, and controlling real-world systems. Ultimately, the article suggests verification, not just generation, is key to driving progress in this rapidly evolving field.
+
+  [granite3.2:2b]  score=7.5
+  The article traces the evolution of artificial intelligence (AI) components in the machine learning pipeline, demonstrating a trend where human-intensive elements are increasingly being replaced by model-made alternatives. This shift is driven by three key factors: 10% degradation in performance, 100x cost reduction, and 10000x speed enhancement.
+
+1. **Synthetic Data (2022):** The approval process, including reward signals, critique, and evaluation, transitioned from human judgment to model-generated ones, such as InstructGPT's reward model and Constitutional AI's model critique.
+
+2. **Training Data (2023):** Textbooks and web data were synthesized using large language models (LLMs) for pretraining, with NVIDIA's Nemotron-4 340B showcasing a significant 3x efficiency improvement.
+
+3. **Teacher (2023):** AI models like Alpaca, Vicuna, Orca, and DeepSeek-R1 demonstrated the capability to function as efficient teachers by fine-tuning on model-generated instructions or knowledge, fixing the train/inference mismatch through on-policy generalized knowledge distillation.
+
+4. **Curriculum (2024):** Self-Rewarding Language Models and SPIN enabled models to design their own tasks and assess their outputs, automating curriculum design.
+
+5. **Researcher (2026):** Models like AlphaEvolve and AI Scientist evolved algorithms and wrote full papers, with Karpathy's autoresearch showcasing a minimal ratchet loop for iterative code changes.
+
+6. **Environment (2026):** Research like Z.ai's GLM-5.3 and Ornith-1.5 built end-to-end synthetic environments, eliminating the need for human-crafted executable task worlds.
+
+7. **Human Subject (2025):** Digital twins, such as Generative Agent Simulations of 1,000 People, used interviews, transaction data, and registered RCTs to recover human bias and behavior, becoming inference workloads.
+
+8. **Physical World (2026, in progress):** Organizations like CZ Biohub and Poolside are compressing the physical world into models for research and experimentation, highlighting the ongoing transition from the physical to the simulated.
+
+The article emphasizes that as AI advances, the focus moves from human intervention to model-driven processes, with the goal of minimizing human input while maximizing efficiency, cost-effectiveness, and performance.
+
+  Winner:    gemma4:12b-mlx
+  Reasoning: gemma4:12b-mlx best captures the article's core thesis about the progression toward human simulation and the enduring limit of synthesizing the physical world, with strong factual alignment and no hallucinations or repetition.
+--------------------------------------------------------------------------------
+
+Article #17: The Evolution of the Agent Harness
+Source: Latent Space
+
+  [gemma4:e4b]  score=7.8
+  The evolution of AI agents is defined by the "agent harness"—the external system of tools, environment, and guardrails surrounding the core LLM. Early development saw the harness advance separately from model capability, leading to stages like "premature autonomy" before moving toward human-in-the-loop systems. As models improve and absorb harness functions, the next evolutionary frontier is predicted to be the "attention-interface," where the harness serves as the agent's interface to governing human attention and permission.
+
+  [gemma4:e2b]  score=8.2
+  The evolution of AI agents hinges on the "agent harness," which encompasses the environment, tools, context, and guardrails that allow a Large Language Model (LLM) to function beyond simple next-token prediction. This evolution involves a dynamic where the model and the harness improve together, leading to the model absorbing the harness's functionality into its weights. The future direction is toward "Harness 3.0," where models will absorb agent capabilities, leaving behind a harness that functions as the agent's interface to human attention, governing permissions and interaction.
+
+  [gemma4:12b-mlx]  score=8.5
+  The article argues that AI agents have evolved through a co-evolutionary process where models increasingly absorb "harness" capabilities—such as tool use, memory, and reasoning—directly into their weights. As engineers delete redundant scaffolds from the external system, the remaining harness shifts from being an interface for the model to an interface for human attention. This evolution suggests a future where the primary engineering challenge is managing the "attention-interface," governing when an agent interrupts a human and which decisions require human approval.
+
+  [gemma3:4b]  score=7.5
+  Here’s a 3-4 sentence summary of the article:
+
+Around Christmas 2025, AI engineers noticed a shift where models began absorbing the “harness” – the tools, context, and guardrails surrounding them – directly into their weights. This led to a dynamic where engineers had to continually delete absorbed elements, ultimately resulting in a harness focused on managing human attention rather than the model itself. The evolution followed a cycle of model and harness improvement, culminating in “harness 2.0” where Reinforcement Learning moved inside the harness, and now, “harness 3.0” envisions the harness becoming the agent’s interface to human attention, representing the scarce and critical resource of human focus.
+
+  [granite3.2:2b]  score=9.3
+  The article traces the evolution of the agent harness, a system that surrounds AI models to enhance their capabilities, from a "brain in a vat" to a more integrated human-centric interface. Initially, models like ChatGPT were confined to their training data and prompt inputs, with the harness (comprising environment, tools, context, and guardrails) serving as the bridge between the model's limitations and real digital interaction.
+
+The agent harness progress can be divided into several stages:
+
+1. ReAct (October 2022): A prompting technique that introduced the concept of an "agent loop" (model reasons -> acts -> observes -> repeats), operating outside the model weights.
+2. AutoGPT/BabyAGI (Spring 2023): This marked the introduction of full model autonomy, pushing the harness curve ahead of the model capability curve, often amplifying errors rather than reliability.
+3. Cursor/Copilot (2023 - 2024): AI-powered IDEs recognized the failure-mode of excessive autonomy, retracting the harness curve downwards and empowering humans to orchestrate the loop while the model accelerates.
+4. Claude Code (February 2025): The first coding agent that successfully seized the opportunity to reintegrate the model with full harness capabilities at the right time, leading to significant success and growth.
+
+As models improved, the model and harness curves began to braid together, with Reinforcement Learning (RL) moving into the harness. This marked the co-training era, where the harness capabilities became an integral part of the model weights. The model can now auto-compact and understand its context window, among other features.
+
+The future, hypothesized as Harness 3.0, will likely involve further absorption of harness capabilities into the model, including multi-agent orchestration, tool selection, and memory. The harness will transform into a human-centric interface, addressing the scarcity of synchronous human attention.
+
+Key points of Harness 3.0 are:
+- Model absorption of harness capabilities, such as permissions, identity, trust, and legibility.
+- The harness evolving to serve as the agent's interface to human attention, or the "attention interface."
+- This interface will govern interruptions, autonomous decision-making, and approval requirements.
+- It will eventually become a learnable component of the agentic system, with every correction contributing to improved performance.
+- By the prediction, every agentic AI company will include a human attention policy surface in their offerings.
+
+In summary, the agent harness has evolved from a confined enabler of model capabilities to an indispensable human-focused interface, paving the way for models to absorb even more human-centric features, ultimately focusing on managing and leveraging human attention.
+
+  Winner:    granite3.2:2b
+  Reasoning: granite3.2:2b provides the most comprehensive, accurate, and well-structured summary with clear stage progression, key concepts (like the model-harness curves and absorption-shed cycle), and future vision, without repetition or hallucination.
+--------------------------------------------------------------------------------
+
+Article #18: Simulation: the new Scaling Law — Joon Sung Park, Simile AI
+Source: Latent Space
+
+  [gemma4:e4b]  score=0.0
+  Simile AI is pioneering the "Second Summer of Simulation" by developing digital twins of human behavior, moving beyond the initial success of Generative Agents. To model humanity, the company incorporates three data types: rich qualitative interview data, basic behavioral data (like transactions), and, crucially, data revealing causal mechanisms, such as that derived from randomized controlled trials. This effort aims to build behavioral foundation models capable of simulating complex societal dynamics, enabling rigorous testing of policies and products before real-world deployment. Ultimately, Simile seeks to address the ambition of simulating entire populations to tackle large-scale issues like climate change or democratic instability.
+
+  [gemma4:e2b]  score=0.0
+  Simile AI, founded by Joon Sung Park, focuses on simulating human behavior by creating digital twins, which have achieved 85–99% accuracy compared to human focus groups. Their approach involves using long-form interviews, observational data, transaction data, and randomized controlled trials to model the causal mechanisms behind human decisions. The company is exploring scaling laws for simulation and aims to eventually simulate the world's 8 billion people to tackle complex societal issues.
+
+  [gemma4:12b-mlx]  score=0.0
+  Joon Sung Park, CEO of Simile AI, argues that simulating human behavior requires moving beyond web-based "attitudinal" data toward "social physics" captured through interviews, observational data, and randomized controlled trials. His company aims to create "digital twins" of humans by modeling the causal mechanisms behind decisions, achieving 85% accuracy compared to human focus groups. This technology is intended to replace expensive human panels for testing products and policies, with an ultimate ambition to simulate the behaviors of all 8 billion people on Earth.
+
+  [gemma3:4b]  score=0.0
+  Simile AI, led by Joon Sung Park, is pioneering a new approach to AI simulation by creating digital twins of human behavior based on extensive data analysis. The company is leveraging data from interviews, observational transactions, and randomized controlled trials to model human decision-making with 85% accuracy, a significant improvement over current frontier models that often fail to capture irrational human behavior. Simile’s ambitious goal is to simulate all 8 billion people on Earth, initially focusing on Fortune 100 clients like CVS to test products and policies, identify counterintuitive solutions, and explore complex societal challenges such as climate change and UBI, marking a shift from simple prediction to actively shaping the future through simulation.
+
+  [granite3.2:2b]  score=0.0
+  Joon Sung Park, CEO of Simile AI, shares the journey from his origins as an artsy, music-focused individual to leading the creation of 8 billion digital twins of humans using advanced simulation technology. Park co-authored the influential 2023 paper, "Generative Agents: Social Physics and Behavioral Foundation Models," which demonstrated AI characters capable of remembering, planning, socializing, and displaying emergent behaviors.
+
+Park's research evolved from the initial focus on generative agents to modeling human behavior comprehensively. He emphasizes the importance of understanding causal mechanisms behind human decisions, leveraging interviews, observational data, transaction records, and randomized controlled trials. Simile's approach to modeling human behavior involves a combination of long-form interviews, observational data, transactional information, and randomized controlled trials, aiming for 85% accuracy in reproducing human responses.
+
+The primary objective of this work is to create representative simulated populations, with the potential to tackle significant global issues like climate change, democratic stability, and universal basic income (UBI). Park sees simulation as an extension of Thomas Schelling's agent-based modeling, potentially applicable to an entire society. He compares simulation to painting, suggesting that it might be a means to visualize and understand complex social phenomena.
+
+Key aspects of Simile's work include:
+
+1. Long-form interviews to gather rich, qualitative data about individuals' lives.
+2. Observational data, such as transaction records and web scraping, for basic behavioral patterns.
+3. Randomized controlled trials (RCTs) to uncover the causal mechanisms underlying human decisions.
+4. Post-training on these diverse data sources to inform deep models of human behavior.
+5. Developing both population-level and individual-level simulation models to capture both collective and personal behavior.
+
+Simile's vision extends beyond current applications, with the ambition to simulate all 8 billion people on Earth. This endeavor aims to help predict future societal outcomes, model emergent behavior, and potentially address pressing global concerns, sparking questions about our existence in a simulated world.
+
+  Winner:    unknown
+  Reasoning: parse error
+--------------------------------------------------------------------------------
+
+Article #19: llm 0.32.1
+Source: Simon Willison's Weblog
+
+  [gemma4:e4b]  score=9.0
+  The article announces the release of "llm 0.32.1," a tool for accessing large language models from the command line. This dot-release was necessary because fresh installations of LLM stopped working due to changes in the OpenAI Python library dropping its use of `httpx`. To fix this, the current release pins the dependency to `openai<3`. Furthermore, a future 0.33 release is planned to update the dependency from `httpx` to `httpx2`.
+
+  [gemma4:e2b]  score=9.5
+  Version llm 0.32.1 addresses an issue where fresh installs of Large Language Models stopped working due to the OpenAI Python library dropping its use of `httpx`. This dot-release fixes the problem temporarily by pinning the dependency to `openai<3`. A future release, version 0.33, will switch from `httpx` to `httpx2`.
+
+  [gemma4:12b-mlx]  score=9.0
+  The release of llm 0.32.1 addresses a bug where fresh installations were failing because the `openai` library dropped its usage of `httpx`. This version resolves the issue by pinning `openai` to a version less than 3. A future release, version 0.33, is planned to transition the tool's dependency from `httpx` to `httpx2`.
+
+  [gemma3:4b]  score=8.5
+  LLM 0.32.1 was released by Simon Willison to address an issue where fresh installations stopped working due to the OpenAI Python library removing its dependency on httpx. The fix temporarily pinned the openai dependency to version 3 or lower, and a subsequent 0.33 release will transition to httpx2. This release focuses on maintaining access to large language models from the command line, and it’s part of a broader effort to ensure stability and functionality within the LLM project.
+
+  [granite3.2:2b]  score=9.0
+  On August 21, 2026, Simon Willison announced the release of llm 0.32.1, a version that addresses an issue affecting recent installations. The problem stemmed from OpenAI's Python library dropping its usage of httpx, a dependency that LLM relied on. This release temporarily fixes the problem by pinning LLM to openai<3. The next release, 0.33, will transition from httpx to httpx2.
+
+  Winner:    gemma4:e2b
+  Reasoning: gemma4:e2b is the most concise, accurate, and repetition-free summary, capturing all key facts without adding unsupported details or redundant phrasing.
+--------------------------------------------------------------------------------
+
+Article #20: llm-openrouter 0.7
+Source: Simon Willison's Weblog
+
+  [gemma4:e4b]  score=9.0
+  The release of llm-openrouter version 0.7 introduces an updated LLM plugin for models hosted by OpenRouter, ensuring compatibility with LLM 0.32. This update allows the plugin to display reasoning traces for LLMs accessed via OpenRouter, as models now utilize OpenRouter's Responses API. Furthermore, the release adds three new server-side tools: Shell, WebFetch, and WebSearch, which can be enabled using options such as `-T WebSearch`.
+
+  [gemma4:e2b]  score=9.0
+  llm-openrouter version 0.7 is an LLM plugin designed for models hosted on OpenRouter, and it is now compatible with LLM 0.32. This update allows the plugin to display the reasoning traces for LLMs available through OpenRouter by utilizing OpenRouter's Responses API implementation. The release introduces three new server-side tools: Shell, WebFetch, and WebSearch, which can be enabled via options such as `-T WebSearch`.
+
+  [gemma4:12b-mlx]  score=8.5
+  The `llm-openrouter` plugin has been updated to version 0.7 to ensure compatibility with LLM 0.32. This update enables the display of reasoning traces for models available through OpenRouter and transitions them to use OpenRouter's Responses API implementation. Additionally, the release introduces three new server-side tools: Shell, WebFetch, and WebSearch.
+
+  [gemma3:4b]  score=8.5
+  llm-openrouter 0.7 is a plugin for interacting with LLMs hosted on OpenRouter, now compatible with LLM 0.32 and displaying reasoning traces. This release updates the plugin to utilize OpenRouter’s Responses API and introduces three new server-side tools: Shell, WebFetch, and WebSearch, which can be enabled with command-line options. Simon Willison released this update on August 21, 2026, focusing on improved compatibility and functionality for OpenRouter-hosted models.
+
+  [granite3.2:2b]  score=8.0
+  On August 21, 2026, Simon Willison announced the release of llm-openrouter 0.7, an LLM plugin compatible with LLM 0.32. This update allows the plugin to display reasoning traces for models hosted on OpenRouter. The release includes three new server-side tools: Shell, WebFetch, and WebSearch, which can be enabled using options like -T WebSearch. This development marks a significant step in enhancing the integration and usability of models through OpenRouter's Responses API.
+
+  Winner:    gemma4:e4b
+  Reasoning: gemma4:e4b and gemma4:e2b are tied for highest score due to perfect factual accuracy, clarity, completeness, and conciseness without repetition; gemma4:e4b is selected as winner for slightly more precise phrasing.
+--------------------------------------------------------------------------------
+
+Article #21: Stop Making TUIs
+Source: Simon Willison's Weblog
+
+  [gemma4:e4b]  score=7.0
+  Thomas Ptacek strongly advocates for developers to build real, native user interfaces for their personal command-line tools (CLIs). He argues that the low cost of GUI development, thanks to coding agents, eliminates excuses for keeping tools purely as command-line interfaces. The article suggests that converting existing CLIs into native apps could significantly change how a developer thinks about their tools. Simon Willison posted this advocacy piece on August 21, 2026.
+
+  [gemma4:e2b]  score=7.5
+  Thomas Ptacek advocates for building native user interfaces for personal tools, arguing that coding agents have made creating a usable GUI almost free. He encourages developers to transform throwaway command-line interfaces into native applications to foster a different way of thinking. The author insists that anyone who hasn't built a native UI from a CLI should do so, believing it will be a significant learning experience.
+
+  [gemma4:12b-mlx]  score=8.5
+  Simon Willison shares a link post by Thomas Ptacek arguing that developers should stop creating Text User Interfaces (TUIs) for small personal tools. Ptacek suggests that because coding agents have reduced the cost of building usable graphical user interfaces (GUIs) to almost nothing, developers should build native apps instead. Willison supports this shift by noting his own successful experience using "vibe-coded" macOS taskbar apps for monitoring bandwidth and GPU usage.
+
+  [gemma3:4b]  score=5.0
+  Simon Willison and Thomas Ptacek are discussing the merits of building native user interfaces (UIs) for personal tools, arguing against the increasing use of Task Us Interfaces (TUIs) created by coding agents. Ptacek suggests that the low cost of creating TUIs has led to a decline in building proper native UIs, and he encourages readers to experiment with converting existing throwaway CLIs into native applications. Willison admits to considering this approach for his own projects, highlighting the potential for native UIs to alter one’s thinking about tool development.
+
+  [granite3.2:2b]  score=5.0
+  Thomas Ptacek encourages developers to create native user interfaces for their small personal tools, arguing that the low cost and simplicity of generating GUIs with coding agents have made this practice obsolete. He emphasizes that building real native UIs will not only enhance user experience but also change one's approach to application development. This perspective is based on Ptacek's personal experience using his own bandwidth and GPU monitoring task bar apps, which he still utilizes daily.
+
+  Winner:    gemma4:12b-mlx
+  Reasoning: gemma4:12b-mlx most accurately and concisely captures the core argument of the article (TUIs vs. native GUIs due to coding agents), correctly attributes the source, and avoids hallucination or repetition.
+--------------------------------------------------------------------------------
+
+Article #22: Quoting Matt Webb
+Source: Simon Willison's Weblog
+
+  [gemma4:e4b]  score=7.8
+  Matt Webb shared an experience where using ChatGPT as an interactive tutor helped him learn how to use quaternions, which was necessary for an application update. Despite outsourcing some thinking to AI, he found that the process compelled him to learn more himself. He expressed satisfaction with this outcome of his interaction with artificial intelligence. This quotation was collected by Simon Willison and posted on August 21, 2026.
+
+  [gemma4:e2b]  score=8.5
+  Matt Webb reflects on his experience learning to use quaternions to make an application work after outsourcing some thinking to ChatGPT. He notes that this process of using AI as an interactive tutor actually motivated him to learn more independently. Webb emphasizes that learning does not stop simply because thinking is outsourced to AI, and he values this outcome.
+
+  [gemma4:12b-mlx]  score=8.2
+  Matt Webb shares his experience using ChatGPT as a patient, interactive tutor to learn the specific mathematics required for his app, such as using quaternions. Rather than asking the AI to write the code for him, Webb used the tool to educate himself on the underlying concepts. He argues that outsourcing certain tasks to AI does not stop the learning process but instead pushes him to learn more.
+
+  [gemma3:4b]  score=6.0
+  In August 2026, Matt Webb, the creator of Galactic Compass 2, shared a quotation reflecting his learning process using ChatGPT to understand quaternions and ultimately build version 1.0 of the app. Webb recounts utilizing ChatGPT as a patient tutor, a method that pushed him to learn beyond his prior knowledge, despite outsourcing complex tasks. This quotation highlights Webb’s approach to incorporating AI into his development workflow and emphasizes the ongoing learning spurred by this interaction.
+
+  [granite3.2:2b]  score=7.0
+  Matt Webb, in an August 21, 2026 post on Simon Willison's blog, discusses his use of AI, specifically ChatGPT, to learn and implement quaternions for his app, Galactic Compass 2. Webb found it more effective to work with an interactive, patient AI tutor than to rely solely on books and conversations with mathematician friends. He emphasizes that despite outsourcing some thinking to AI, his education continues and even expands, valuing this outcome. The post highlights the application of large language models (LLMs) like ChatGPT in practical development tasks.
+
+  Winner:    gemma4:e2b
+  Reasoning: gemma4:e2b most accurately and concisely captures the core ideas without repetition or hallucination, reflecting Matt Webb's experience with ChatGPT as a tutor that deepened his own learning despite outsourcing some thinking.
+--------------------------------------------------------------------------------
+
+Article #23: Why We Fine-Tuned SigLip (And Why That’s Not Always the Right Call)
+Source: Towards Data Science
+
+  [gemma4:e4b]  score=8.8
+  The article compares using third-party Vision-Language Models (VLM) via prompting versus training a custom image classifier, particularly in the context of real estate photo tagging. Training a custom classifier on open-source models like SigLIP or DINO offers significant cost savings at scale and provides reliable, calibratable per-class confidence scores lacking in API prompts. While fine-tuning via LoRA improved metrics like recall by mitigating under-labeling—a key advantage—the choice depends on whether the primary problem is insufficient labeling coverage or if a faster, lower-effort approach suffices.
+
+  [gemma4:e2b]  score=8.6
+  The article discusses the trade-offs between using pre-trained vision-language models (VLMs) via prompting and fine-tuning them (like SigLIP) to build custom image classifiers for real estate data. Fine-tuning with low-rank adapters (LoRA) was shown to significantly reduce under-labeling and improve classification performance, especially for classes like GARDEN. While fine-tuning yields performance gains, choosing the right foundation model (e.g., DINOv2 vs. SigLIP) and considering cost are also crucial business decisions. Ultimately, the optimal approach depends on specific application needs, balancing accuracy, cost, and the need to address under-labeling.
+
+  [gemma4:12b-mlx]  score=9.0
+  Alma Media developed a custom image classifier to automatically tag real estate photos with 23 different room and content categories. The team compared using a prompted Vision-Language Model (VLM) API against training custom models on SigLIP and DINOv2 foundations, finding that custom models offered significantly lower inference costs and more reliable per-class confidence scores at scale. They determined that while a frozen model achieves decent results, using Low-Rank Adaptation (LoRA) fine-tuning on SigLIP effectively solved the "under-labeling" problem by improving recall for specific categories like gardens and dining areas. Ultimately, the authors recommend starting with a VLM to build an initial annotated dataset before transitioning to a custom classifier and, if necessary, fine-tuning for higher accuracy.
+
+  [gemma3:4b]  score=8.7
+  Alma Media’s real estate services handle hundreds of thousands of listings with accompanying photos, aiming to automatically tag them with room types (living room, kitchen, bedroom) and content classes (floor plans, garden photos). They initially explored using Google’s SigLIP model through an API, but found it struggled with ambiguous images and under-labeled data.  To address this, they built their own image classifiers, primarily using fine-tuning of Google’s SigLIP model with LoRA adapters to mitigate under-labeling and improve accuracy, especially for classes like garden and hallway.  Cost comparisons showed that training their own classifier on a dedicated AWS instance was significantly cheaper (around $0.37 per 1,000 images) than using the API ($1.50 per 1,000 images), highlighting the importance of considering scaling costs when choosing an approach.
+
+  [granite3.2:2b]  score=8.3
+  Alma Media, a Finnish digital services company, developed an image classification system for real estate listings with 23 classes, including LIVING ROOM, KITCHEN, and BEDROOM. The task involves multi-label classification, where a single image can belong to multiple classes simultaneously. The team explored three key questions when building their proprietary classifiers:
+
+1. Should you prompt an API or train your own model?
+Alma Media chose to train their own classifier due to the complexity and need for fine-tuning on their specific use case. They initially used a pre-trained API but faced limitations for their real estate classification requirements. They eventually trained their own model using Google's SigLIP as the foundation.
+
+2. Which foundation model to use?
+They selected SigLIP, a caption-trained vision transformer model, as it excels in recognizing image contents like people, animals, and vehicles. For classes like GARDEN and HALLWAY, which are background-centric, they also evaluated DINOv2, a self-supervised model with patch-level objectives, and found it to be more suitable.
+
+3. To fine-tune or not to fine-tune?
+After experimenting with shallow linear classifiers on top of frozen ViT representations, the team found fine-tuning with low-rank adapters (LoRA) to be the superior approach. LoRA preserves the frozen ViT backbone while adding a few trainable parameter layers. This method delivers nearly the same performance gain as full fine-tuning while being faster and more manageable on modest GPU setups.
+
+Their comparison of approaches revealed that fine-tuning largely addressed under-labeling issues, which plagued the frozen SigLIP and DINOv2 models, leaving 9.4% and 10.8% of photos respectively without labels. LoRA fine-tuning significantly reduced this to 3.4%, making it a more flexible solution.
+
+In conclusion, Alma Media found that fine-tuning was beneficial for their use case, especially when under-labeling was a concern. However, for projects with periodic retraining needs, or when a lower-cost solution is required, using a frozen ViT backbone could be a more practical approach. Overall, training custom image classifiers pays off, as it enabled better downstream functionalities, including improved search results and recommendations in their real estate listings services.
+
+  Winner:    gemma4:12b-mlx
+  Reasoning: gemma4:12b-mlx provides the most accurate, complete, and concise summary with no repetition, correctly covering the core motivations, methods, results (including LoRA's impact on under-labeling), and the recommended stepwise approach, while others either omit key details or slightly over-emphasize less central points.
+--------------------------------------------------------------------------------
+
+Article #24: Running Codex as a Headless Agent
+Source: Towards Data Science
+
+  [gemma4:e4b]  score=8.0
+  The article details how to run Codex as a "headless agent," transforming it from an interactive tool into a callable component within an automated workflow. The process involves preparing a structured task, exemplified by building a research digest workflow using Python. This workflow calls Codex via `codex exec` with specific arguments to enforce structured JSON output, allowing subsequent steps to programmatically consume the results. This pattern combines deterministic code control with Codex's agentic capabilities for repeatable, complex tasks.
+
+  [gemma4:e2b]  score=8.5
+  The article explains how to run Codex as a headless agent within a larger automation workflow, transforming it from an interactive assistant into a programmable component. This is achieved by structuring the workflow so that deterministic code prepares a task, and Codex executes the agentic part, returning a structured output that the subsequent steps can consume. A case study demonstrates a three-step process where a Python workflow prepares a research task, calls Codex to perform the research, and then renders the results into an HTML digest. This pattern allows workflows to benefit from agentic capabilities while maintaining overall control and structure through traditional code.
+
+  [gemma4:12b-mlx]  score=8.5
+  This article explores how to transition Codex from an interactive assistant into a "headless" agent that functions as a callable component within automated workflows. The author demonstrates this by building a research digest workflow where Python handles deterministic tasks like prompt preparation and HTML rendering, while Codex performs the open-ended research task. By enforcing a structured JSON output schema and using the `codex exec` CLI command, the system ensures that the agent's output can be programmatically consumed by subsequent processing steps. This hybrid approach allows developers to combine the reliability of traditional code with the adaptive capabilities of an AI agent.
+
+  [gemma3:4b]  score=8.5
+  This article explores how to utilize Codex as a “headless agent” within automated workflows, moving beyond its typical interactive use. The core idea is to treat Codex as a callable component, feeding it a structured task and receiving a formatted output for use in subsequent steps. A case study demonstrates this with a research digest workflow, where Python prepares the research task (including a prompt for Codex), Codex performs web searches and generates a JSON summary, and finally, the output is rendered into an HTML digest. This approach combines the determinism and control of traditional code with Codex's agentic capabilities, offering a way to integrate AI into repeatable, automated processes. The article highlights the use of `codex exec` for non-interactive execution, along with features like sandboxing and JSON output for programmatic consumption of Codex’s results.
+
+  [granite3.2:2b]  score=9.0
+  In this article, Shuai Guo explores how to use Codex as a headless agent within an automation workflow. The goal is to integrate Codex, typically used interactively, into a more structured, deterministic process while leveraging its agentic capabilities for specific, open-ended tasks. The article demonstrates this by creating a research digest workflow:
+
+1. The desired workflow shape involves Codex as a callable, standalone step in a larger process, rather than a conversation partner. This pattern is beneficial when one part of a workflow requires agentic work, such as in-depth research.
+
+2. Guo illustrates this through a case study of generating a weekly research digest for AI data-center infrastructure. The workflow, implemented in Python, includes three main steps:
+
+   a. **Preparing the Run:**
+   - Python sets up a prompt for Codex, specifying the task, expected outcome, and structure for the final answer.
+   - It generates a structured JSON file, which Codex will output.
+
+   b. **Running Codex Headlessly:**
+   - The Codex Command Line Interface (CLI) is utilized for non-interactive execution.
+   - The command is crafted to allow live web search, use a specific model (gpt-5.6-sol), and format the output as JSON.
+   - The input for Codex is obtained from the prepared prompt, and the output is directed to a file for later consumption.
+
+   c. **Rendering the Digest As HTML:**
+   - The structured JSON output from Codex is converted into an HTML file, displaying the topic summary, event details, and source links.
+
+The workflow's final step turns Codex's structured response into an easily consumable HTML digest. By combining deterministic and agentic elements, the overall process becomes more flexible and manageable. This pattern is particularly useful for workflows with both repeatable and open-ended components, where agentic agents can handle the more complex tasks, and traditional code handles the structured, predictable parts.
+
+  Winner:    granite3.2:2b
+  Reasoning: granite3.2:2b provides the most complete, accurate, and concise summary with no hallucinations or repetition, effectively capturing the workflow, case study details, and key insights while maintaining strong factual alignment with the source.
+--------------------------------------------------------------------------------
+
+Article #25: Estimating from No Data: Deriving a Continuous Score from Categories
+Source: Towards Data Science
+
+  [gemma4:e4b]  score=5.0
+  The article details a method for deriving a continuous severity score from limited training data that only provides categorical outcomes (e.g., home recovery, hospitalization, death). The approach involves training a low-capacity neural network with a specialized "category approximator head." This head learns to define trainable thresholds between the categories by using the softmax output of the network. By mathematically extracting these intersection points, the model yields a continuous score whose ranking relative to the learned thresholds predicts the most likely outcome category.
+
+  [gemma4:e2b]  score=7.5
+  The article describes a method for deriving a continuous danger score from only categorical labels, such as "treated at home and recovered," "hospitalized and recovered," or "died," by training a neural network with a bottleneck. To achieve a continuous score instead of just predicting a category, the method incorporates a "category approximator head" that learns to predict the category based on the learned score. By analyzing the linear relationships between the score and the category probabilities, specific thresholds can be extracted to define the boundaries between the danger categories. This approach leverages simple, interpretable models like linear regression to produce a meaningful, smooth risk assessment from limited data.
+
+  [gemma4:12b-mlx]  score=8.0
+  The article describes a method for deriving a continuous severity score from categorical labels by using a low-capacity neural network with a "category approximator head." To prevent the model from simply collapsing onto discrete target values, the author uses a linear bottleneck (regression) to ensure the output remains smooth and interpretable. The architecture includes a decoder that learns trainable thresholds between categories, utilizing a "propagate sum" technique to enforce a logical, increasing order of severity. Ultimately, this approach allows for the identification of nuanced risk levels, such as identifying patients nearing hospitalization thresholds, even when the training data only provides broad categorical outcomes.
+
+  [gemma3:4b]  score=4.5
+  Here’s a 3-4 sentence summary of the article:
+
+This article details a method for deriving a continuous “danger score” from categorical patient data, even with limited training information. It employs a low-capacity neural network with a bottleneck and a “category approximator head” to learn this score, focusing on interpreting the outcomes of a respiratory illness. The key technique involves creating a linear regression model with a carefully designed head that predicts categories based on the score, using thresholds to define the boundaries between outcomes, and ensures a meaningful, interpretable scoring system. This approach provides a way to quantify the severity of an infection from available categories, highlighting the effectiveness of simple models in data-scarce scenarios.
+
+  [granite3.2:2b]  score=6.0
+  Elod Pal Csirmaz explains how to create a continuous scoring system using a low-capacity neural network when only categorical labels (treatment at home, hospitalized, or death) are available for training. The author demonstrates this on a hypothetical dataset of patients with Pathogen A, focusing on predicting the severity of infection for two groups: those treated at home and those hospitalized.
+
+The process involves three main steps:
+
+1. **Low-capacity network (linear regression):** A single-layer dense network with no activation is used to generate a continuous score. This model cannot effectively map the score to specific categories, so it's essential to incorporate a category approximator head to establish meaningful thresholds between categories.
+
+2. **Category approximator head:** The head learns to predict the categories based on the score, enforcing the desired order of categories. The model outputs the likelihoods of each category. By analyzing these probabilities, the thresholds (t0 and t1) between categories are calculated, enabling the model to predict the severity of infection.
+
+3. **Ensuring correct order of categories:** Keras's kernel constraint is used to force the weights to be in increasing order (w1 ≤ w2 ≤ w3), ensuring the model determines the correct order of categories.
+
+The final model combines a linear regression with this head, trained using the categorical cross-entropy loss. With this approach, the model achieves 80% accuracy in approximating the toy example. This simple model is highly interpretable, moving the score in line with its inputs and providing a better understanding of the relationship between input features and the severity of the infection. The technique is applicable to various applications where interpretability and quick training are crucial.
+
+  Winner:    gemma4:12b-mlx
+  Reasoning: gemma4:12b-mlx best balances accuracy, completeness, and conciseness while avoiding repetition and hallucination, correctly capturing the propagate sum technique and low-capacity bottleneck rationale.
+--------------------------------------------------------------------------------
+
+Article #26: Retrieve One Row from a Table, Not the Whole Table: Row-Level Chunks for RAG
+Source: Towards Data Science
+
+  [gemma4:e4b]  score=0.0
+  The article proposes using "row-level chunks" as a specialized unit for Retrieval-Augmented Generation (RAG) when dealing with tables, recognizing that a user's query often pertains to a single row, not the entire table structure. The solution involves serializing every body row of a detected table into its own retrievable chunk, with the column headers included to maintain context. This dual-scale indexing allows the RAG system to intelligently route queries: targeted lookups retrieve only the relevant single row, while synthesis queries can trigger a wider retrieval of multiple related rows. This approach significantly reduces context noise and improves accuracy over indexing the entire table as one block.
+
+  [gemma4:e2b]  score=0.0
+  The article proposes using row-level chunks for Retrieval-Augmented Generation (RAG) when dealing with tables, treating each body row with its headers as a distinct retrieval unit instead of the entire table. This involves a serialization function that converts table rows into indexed chunks, allowing a dispatcher to select between row-level lookups (for targeted questions), table-level retrieval (for synthesis), or mixed queries. The system also includes logic to handle complex table structures, such as multi-row headers, by folding them into a single, labelled header row within the chunk.
+
+  [gemma4:12b-mlx]  score=0.0
+  This article proposes a "row-level" retrieval strategy for Retrieval-Augmented Generation (RAG) systems to improve accuracy when queries target specific data within large tables. Instead of indexing a whole table as a single chunk, the system serializes each body row into a self-explaining string that pairs values with their respective column headers. A dispatcher then selects between row-level and table-level retrieval based on the question type: targeted lookups retrieve only the relevant row to save tokens, while synthesis queries widen the scope to include the entire table. The method also includes a specialized logic to handle multi-row headers by merging flattened labels into a single indexed header row.
+
+  [gemma3:4b]  score=0.0
+  Here’s a 3-4 sentence summary of the article:
+
+When dealing with documents containing tables, the article proposes a new retrieval approach that treats each table row with its column headers as a distinct chunk, rather than indexing the entire table at once. This “row-level chunking” technique significantly improves retrieval accuracy by focusing on the specific question being asked, avoiding irrelevant data. The system utilizes a parallel indexing strategy, incorporating keyword and embedding signals alongside the row-level chunks, and allows an LLM to prioritize the most relevant results. Finally, the article details the implementation of this approach with a runnable code example, showcasing its effectiveness with a small table and a larger academic paper.
+
+  [granite3.2:2b]  score=0.0
+  This article, part of the Enterprise Document Intelligence series, focuses on a novel approach to table retrieval, emphasizing the unit of retrieval as individual rows rather than the entire table. The traditional method treats tables as one large chunk, which can lead to irrelevant rows being returned alongside the correct answer. To address this, the author introduces a row-level index for tables, improving retrieval efficiency.
+
+The key aspects of this approach are:
+
+1. **Row-level Chunks**: Each table row is treated as a separate entity, preserving the structure where one row corresponds to one question. This allows for precise, targeted retrieval of specific information.
+
+2. **Serializer Function**: The `serialize_table_rows` function converts a parsed table into a row-level index. It groups contiguous pipe-separated lines as table rows, extracts column headers, and outputs each row as a column-value pair.
+
+3. **Dispatcher's Role**: The dispatcher determines whether to fetch individual rows or the whole table based on the question shape. For targeted lookups, it returns one row; for synthesis queries, it expands to the full table; for mixed queries, it combines responses from multiple rows.
+
+4. **Multi-row Headers Handling**: The serializer handles tables with spanned headers by merging them into one labelled row. This prevents misalignment with ordinary single-row-header tables.
+
+The article demonstrates the effectiveness of this method on two real-world examples: a car-insurance contract's guarantees table and the Attention paper's Table 1. It shows that targeted queries can retrieve one relevant row, while synthesis queries return a full table's worth. This approach significantly improves retrieval efficiency, especially for documents with extensive tables.
+
+In conclusion, this article proposes a scalable and robust method to improve retrieval of information from tables in documents by making the unit of retrieval one row at a time, along with a serializer function and a dispatcher mechanism to manage scale selection based on question types.
+
+  Winner:    unknown
+  Reasoning: parse error
+--------------------------------------------------------------------------------
+
+Article #27: The Types of Dimensions in a Star Schema, and How to Use Them
+Source: Towards Data Science
+
+  [gemma4:e4b]  score=7.0
+  A Star Schema, a dimensional modeling approach, consists of fact tables detailing business processes and surrounding dimension tables providing descriptive context. There are three main dimension types: Regular dimensions describe core business entities (like Customer), Junk Dimensions group small, miscellaneous attributes, and Degenerate Dimensions are frequent, transactional identifiers kept in the fact table. The model's structure is further managed using concepts like Conformed Dimensions, Surrogate Keys, and handling data changes over time with Slowly Changing Dimensions (SCD2).
+
+  [gemma4:e2b]  score=7.5
+  A Star Schema in dimensional modeling consists of fact tables, which describe business events, and dimension tables, which contain descriptive data. Dimensions are categorized into Regular, Junk, and Degenerate types, with Regular dimensions describing business entities, Junk dimensions combining multiple entities, and Degenerate dimensions containing details directly related to facts. Effective dimensional modeling involves using conformed dimensions, planning with a dimension matrix, and incorporating concepts like surrogate keys and Slowly Changing Dimensions to manage historical data effectively.
+
+  [gemma4:12b-mlx]  score=8.0
+  A star schema is a foundational data modeling approach consisting of fact tables, which record business processes, and dimension tables, which provide descriptive attributes like geography or products. The article identifies three specific types of dimensions: regular dimensions for business entities, junk dimensions to group small entities, and degenerate dimensions for frequent changes like transaction numbers. To manage these effectively, the author recommends using a "Dimension Matrix" to map relationships and employing surrogate keys to manage slowly changing dimensions (SCD2).
+
+  [gemma3:4b]  score=9.0
+  Here’s a 3-4 sentence summary of the article:
+
+The article explains the core concepts of a Star Schema, a common data modeling technique for data analysis. It outlines three main types of dimensions: regular dimensions (like customer or product) with hierarchies, junk dimensions (used to consolidate smaller entities), and degenerate dimensions (like transaction numbers).  Crucially, it highlights the importance of conforming dimensions (shared across multiple fact tables) and using surrogate keys and slowly changing dimensions (SCD2) to manage historical data accurately.  Ultimately, the article advocates for a dimension matrix to plan the data model and ensure it aligns with business reporting needs.
+
+  [granite3.2:2b]  score=6.5
+  The article discusses dimensional modelling, focusing on the types of dimensions in a star schema, which is a popular data modelling approach for reporting. This model consists of two main object types: fact tables and dimensions.
+
+Fact tables store numeric data describing business processes, such as sales transactions or stock levels. Dimensions, on the other hand, contain descriptive data like dates, customer information, geographical data, and product attributes. The star schema is easy to understand, separates transactional data from descriptive data, and accommodates complex business scenarios, making it widely used in reporting models.
+
+Three types of dimensions are explored:
+
+1. Regular Dimensions: These describe a single business entity (e.g., customers, products, geography) with unique identifiers, denormalized data, and hierarchies for grouping and aggregation.
+
+2. Junk Dimensions: Created when multiple small dimensions exist for a specific entity, they group these dimensions into a single, manageable entity to avoid confusion. Examples include areas or groups.
+
+3. Degenerate Dimensions: Directly related to transactional data in the fact table, like transaction numbers. This type is common in transactional tables.
+
+The article also emphasizes using surrogate keys for handling slowly changing dimensions, which enable tracking of changes in business keys (e.g., client region) without data conflicts. The contours dimension matrix is recommended for visualizing the relationships between fact and dimension tables when planning a dimensional model.
+
+Key takeaways:
+- Regular dimensions describe single entities with unique keys, denormalized data, and hierarchies.
+- Junk dimensions group multiple small dimensions into one manageable entity.
+- Degenerate dimensions store transactional data in the fact table.
+- Surrogate keys manage slowly changing dimensions, allowing consistent data representation for entities like clients moving between regions.
+- Creating a dimension matrix helps communicate the data model to all stakeholders, including report creators.
+
+  Winner:    gemma3:4b
+  Reasoning: gemma3:4b provides the most accurate, concise, and comprehensive summary without repetition, covering all key dimension types, conformed dimensions, surrogate keys, SCD2, and the dimension matrix while staying faithful to the source.
+--------------------------------------------------------------------------------
+
+Article #28: Could the mechanism that makes reinforcement learning effective also help explain some of its failure modes?
+Source: RL Reddit
+
+  [gemma4:e4b]  score=8.2
+  The article proposes that the effectiveness of reinforcement learning stems from a closed-loop mechanism where inference informs training, creating a positive feedback path. By experimentally manipulating the concentration of correct positive feedback across four equally trained skills, the authors observed that increasing focus on one skill significantly boosted its support share while diminishing the margins of others. Intriguingly, the initially reinforced skill maintained perfect accuracy even as other skills degraded, and this capability loss was shown to be reversible by redistributing feedback. This suggests that the tendency for positive feedback to concentrate reinforcement around favored routes might be an inherent consequence of this functional support reorganization mechanism.
+
+  [gemma4:e2b]  score=7.5
+  The author investigates the mechanism behind reinforcement learning's effectiveness, proposing that a positive-feedback loop closes inference back into training, where consequences modify future training by reinforcing functional routes. Experiments testing this idea found that concentrating positive feedback on an already learned skill caused the model to focus more on that skill, leading to a trade-off in accuracy for other skills, which could be explained by this feedback mechanism. The results suggest that reward correctness alone is insufficient; feedback concentration and duration influence how functional support is reorganized, potentially unifying the consolidation of behavior and the amplification of support through a single mechanism.
+
+  [gemma4:12b-mlx]  score=8.6
+  The author explores whether the same feedback mechanism that enables reinforcement learning (RL) to consolidate successful behavior also explains its failure modes, such as reduced solution diversity and policy exploitation. By studying a system where inference acts as a projection of pre-formed functional organization, the author proposes that positive feedback cycles can create a reinforcement loop that prioritizes certain functional routes over others. Experimental results showed that concentrating positive feedback on a mastered skill leads to a steady erosion of the "functional support" for other skills, eventually causing a loss in their accuracy. Finally, the study demonstrates that this erosion is reversible by redistributing feedback, suggesting that the distinction between initial capability formation and subsequent support amplification is a key factor in long-running RL systems.
+
+  [gemma3:4b]  score=8.9
+  This research investigates the underlying mechanisms behind both the effectiveness and apparent failures of reinforcement learning. The study found that successful reinforcement learning relies on a feedback closure where correct feedback reinforces existing functional support, leading to a context-conditioned projection of the trained state. Specifically, experiments using a GRU system revealed that concentrated positive feedback caused the reinforced skill to increase its support share while diminishing the support of other skills, demonstrating a tendency to consolidate learning around previously favored routes. Furthermore, the research showed that this trade-off could be reversed by redistributing feedback, suggesting that reward concentration and duration, rather than simply correctness, play a crucial role in shaping long-term learning dynamics within reinforcement learning systems.
+
+  [granite3.2:2b]  score=7.0
+  The article explores a potential mechanism behind reinforcement learning's effectiveness and failure modes. It proposes that reinforcement learning enables behavior consolidation through "frozen inference" as a context-conditioned projection of pre-trained functional organization. This process involves inference reusing existing training-derived support to generate actions, which produce consequences that can be credited back to those actions, thereby modifying future training.
+
+To test this idea, the author conducted experiments on an attention-free four-skill GRU system. Initially, all skills were trained to mastery, and then the distribution of correct positive feedback was manipulated across four conditions (balanced, mild, high, and exclusive) while maintaining a fixed total training budget. The results showed that as feedback concentrated more on the reinforced skill, its support share increased, while the support of other skills decreased. Interestingly, even with significantly reduced support margins, the reinforced skill maintained 100% accuracy at every condition, whereas the other skills' accuracy dropped but remained above 100% (100% for mild and high concentration, 99.48% for exclusive feedback).
+
+Key findings suggest that reinforcement's ability to consolidate useful behaviors and its propensity to focus learning on already favored routes might be aspects of the same feedback mechanism, influenced by feedback concentration and duration. The researcher concludes that this interpretation could help better understand long-running reinforcement learning systems by distinguishing between capability formation and continued support amplification. The observations do not imply interference, continual learning effects, loss of plasticity, or overtraining but rather highlight the dynamics of feedback concentration in reinforcement learning systems.
+
+  Winner:    gemma3:4b
+  Reasoning: gemma3:4b best captures the core mechanism, experimental findings, reversibility, and interpretation with high fidelity, clarity, and conciseness without repetition or hallucination.
+--------------------------------------------------------------------------------
+
+Article #29: OpenAI before ChatGPT: training an AI to compete in Dota 2
+Source: RL Reddit
+
+  [gemma4:e4b]  score=3.5
+  The article details the process of training an AI to compete in the complex and strategic game, Dota 2, with the context of OpenAI's earlier work before the release of ChatGPT. The focus is on the technical methods and development required to create an AI capable of high-level gameplay. This suggests a technical deep dive into machine learning applied to professional esports. The provided title and lack of body content indicate the summary must focus on the subject matter implied by the title.
+
+  [gemma4:e2b]  score=4.0
+  The article discusses OpenAI's work on training an AI to compete in the game Dota 2, preceding the development of ChatGPT. This project aimed to apply large language model training techniques to the domain of real-time strategy gaming. The content suggests an exploration into applying AI to complex strategic environments.
+
+  [gemma4:12b-mlx]  score=2.0
+  The provided content does not include an actual article, but rather a header for a post titled "OpenAI before ChatGPT: training an AI to compete in Dota 2." Because the body text is missing, there is no specific information available to summarize regarding the training of the AI or its competition in the game.
+
+  [gemma3:4b]  score=6.5
+  OpenAI researchers developed an AI agent, nicknamed “DotaAI,” trained specifically to compete in the complex strategy game Dota 2, predating the release of ChatGPT. The team utilized a reinforcement learning approach, allowing DotaAI to learn through trial and error against human and AI opponents.  Specifically, DotaAI achieved a competitive ranking within the game’s ranked system, demonstrating the potential of AI for mastering complex, real-time strategy games. This project served as a foundational experiment exploring AI’s capabilities in strategic decision-making and complex game environments.
+
+  [granite3.2:2b]  score=5.5
+  The article discusses OpenAI's early efforts in developing an AI for competitive gaming, focusing on Dota 2, a multiplayer game known for its complexity and strategic depth. OpenAI trained an AI named "Dota 2 AI" using reinforcement learning, where it played hundreds of thousands of games against itself and other bots to optimize decision-making. The AI was designed to not only play but also learn from human players, enhancing its strategies through these interactions. The goal was to create a system capable of competing at a professional level, showcasing OpenAI's commitment to advancing AI in complex, dynamic environments beyond language understanding.
+
+  Winner:    gemma3:4b
+  Reasoning: gemma3:4b provides the most accurate, specific, and well-structured summary with concrete details (e.g., 'DotaAI', reinforcement learning, competitive ranking) without hallucination or repetition, making it the clearest and most complete despite minor overconfidence in specifics not verified in the source.
+--------------------------------------------------------------------------------
+
+Article #30: Step-by-step guide to run a completely uncensored local AI model from scratch?
+Source: RL Reddit
+
+  [gemma4:e4b]  score=4.0
+  This article is a step-by-step guide detailing the process of setting up and running a completely uncensored local AI model from scratch. The content was submitted by a user identified as /u/woxgin. The article format suggests it provides technical instructions, likely involving software installation and model configuration, to achieve an uncensored AI environment locally.
+
+  [gemma4:e2b]  score=3.5
+  The article provides a step-by-step guide on how to run a completely uncensored local AI model from scratch. It outlines the process for setting up and operating such a model locally. The content is a guide rather than a direct technical explanation of the steps themselves, as it is a submission from a user.
+
+  [gemma4:12b-mlx]  score=2.0
+  The provided text does not contain a guide or information regarding how to run an uncensored local AI model. It only consists of a title and metadata indicating the post was submitted by a user named "woxgin." Consequently, no factual summary of a guide can be produced from the provided content.
+
+  [gemma3:4b]  score=6.0
+  This article provides a detailed, step-by-step guide for users to run a completely uncensored local AI model from scratch, focusing on building and training a large language model (LLM) independently. The process involves acquiring training data, setting up a suitable hardware environment – typically a powerful GPU – and utilizing open-source frameworks like PyTorch.  Specifically, it outlines the necessary steps for data preparation, model architecture selection, training, and fine-tuning, emphasizing a lack of built-in safeguards or censorship mechanisms. Ultimately, the goal is to empower users to create and control their own AI models without relying on pre-trained, potentially restricted models.
+
+  [granite3.2:2b]  score=5.5
+  This article offers a detailed, step-by-step guide to develop and deploy a local AI model without any censorship, from scratch. It begins by outlining the necessary hardware and software prerequisites, including a powerful computer and deep learning libraries like TensorFlow or PyTorch. The guide then proceeds to walk readers through data collection and preprocessing, emphasizing the importance of ethical sourcing and handling sensitive data. Subsequent steps involve model architecture design and training, using publicly available datasets for privacy preservation. Finally, the process includes deployment, focusing on privacy-preserving techniques to ensure the model operates securely on the user's local machine.
+
+  Winner:    gemma3:4b
+  Reasoning: gemma3:4b provides the most factually grounded, complete, and concise summary with accurate technical details (data prep, hardware, PyTorch, lack of safeguards) and no hallucinations or repetition, while others either add unsupported specifics (granite3.2:2b on ethical sourcing/privacy-preserving techniques), are too vague (gemma4:e2b), or incorrectly claim content exists where it does not (gemma4:12b-mlx).
+--------------------------------------------------------------------------------
+
+SUMMARY
+================================================================================
+  gemma4:e4b                      wins=  1  avg_score=6.67  avg_latency=3.88s  final_score=6.58
+  gemma4:e2b                      wins=  3  avg_score=6.69  avg_latency=2.47s  final_score=7.68
+  gemma4:12b-mlx                  wins=  7  avg_score=7.07  avg_latency=10.95s  final_score=5.63
+  gemma3:4b                       wins=  7  avg_score=6.79  avg_latency=3.66s  final_score=6.77
+  granite3.2:2b                   wins=  9  avg_score=6.92  avg_latency=5.93s  final_score=6.10

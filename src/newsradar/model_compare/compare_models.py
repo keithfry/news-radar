@@ -6,9 +6,9 @@ then all judging is done by the judge model at the end — so only one large
 model is loaded into VRAM at any point.
 
 Usage:
-    uv run -m newsradar.ad_detector.compare_models --config path/to/config.toml --topic ai
-    uv run -m newsradar.ad_detector.compare_models --config path/to/config.toml --topic ai --hours 48
-    uv run -m newsradar.ad_detector.compare_models --config path/to/config.toml --topic ai --out results.txt
+    uv run -m newsradar.model_compare.compare_models --config path/to/config.toml --topic ai
+    uv run -m newsradar.model_compare.compare_models --config path/to/config.toml --topic ai --hours 48
+    uv run -m newsradar.model_compare.compare_models --config path/to/config.toml --topic ai --out results.txt
 """
 
 import argparse
@@ -101,7 +101,11 @@ def _judge(article_num: int, title: str, text: str, summaries: dict[str, str]) -
         "You are evaluating AI-generated article summaries against the source article. "
         "Score each summary from 0.0 to 10.0 based on factual accuracy against the source "
         "(penalize hallucinated or unsupported claims heavily), clarity, "
-        "completeness, and conciseness. Then give a composite ranking.\n\n"
+        "completeness, and conciseness. Also check for repetition: penalize heavily "
+        "if a summary restates the same statement more than once in different words "
+        "(e.g. the opening sentence rephrased again later, or two sentences that convey "
+        "the same fact) — this is a conciseness failure even if each individual "
+        "sentence is accurate. Then give a composite ranking.\n\n"
         f"Article #{article_num}: {title}\n\n"
         f"Source content:\n{text}\n\n"
         f"{sections}\n\n"

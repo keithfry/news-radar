@@ -12,12 +12,10 @@ but expresses them as real pytest assertions:
   installed (`newsradar ad-detector install`); skipped automatically if
   unavailable.
 
-Also verifies the `newsradar.ad_detector.*` import paths referenced by the
-porting task — `compare_models` and `update_modelfile` are submodules, not
-flat top-level names (`compare_models` additionally isn't re-exported from
-`newsradar.ad_detector/__init__.py` since it pulls in the heavier RSS/
-article-fetching dependency chain; import it directly from
-`newsradar.ad_detector.compare_models`).
+Also verifies the `newsradar.ad_detector.*` and `newsradar.model_compare.*`
+import paths — `update_modelfile` is a submodule of `ad_detector`, not a flat
+top-level name; `compare_models` lives in its own `newsradar.model_compare`
+package.
 """
 
 from __future__ import annotations
@@ -53,8 +51,8 @@ def _metrics(y_true: list[bool], y_pred: list[bool]) -> dict:
 
 
 def test_module_import_paths():
-    """newsradar.ad_detector.* submodules import correctly (not flat names)."""
-    from newsradar.ad_detector.compare_models import compare_models
+    """newsradar.ad_detector.* / newsradar.model_compare.* submodules import correctly."""
+    from newsradar.model_compare.compare_models import compare_models
     from newsradar.ad_detector.update_modelfile import update_modelfile
     from newsradar.ad_detector import install_ad_detector_model, update_modelfile as reexported_update
 
