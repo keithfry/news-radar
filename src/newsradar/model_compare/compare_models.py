@@ -26,7 +26,7 @@ from ..article_fetcher import enrich_with_full_text
 from ..config import Config, load_config
 from ..feed_fetcher import fetch_all_feeds
 
-MODELS = ["gemma4:e4b", "gemma4:e2b", "gemma4:12b-mlx", "gemma3:4b", "granite3.2:2b"]
+MODELS = ["gemma4:e4b", "gemma4:e2b", "gemma3:4b", "granite3.2:2b", "qwen3:4b"]
 JUDGE_MODEL = "nemotron-3-super:cloud"  # qwen3.5:397b-cloud requires paid Ollama subscription (403)
 ARTICLE_COUNT = 30
 JUDGE_TIMEOUT_SECONDS = 90
