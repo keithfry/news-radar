@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from email.utils import format_datetime
 from pathlib import Path
 
+from .filename_dates import parse_date_from_stem
 from .topics import Topic
 
 MAX_EPISODES = 20
@@ -34,15 +35,10 @@ def _tagline_from_chapters(chapters_path: Path) -> str:
 
 def _date_from_stem(stem: str, prefix: str) -> datetime | None:
     """Parse YYYY-MM-DD from stem like 'ai-radar-2026-05-21' or 'robotics-radar-2026-05-21'."""
-    suffix = stem[len(prefix):]  # e.g. "2026-05-21"
-    parts = suffix.lstrip("-").split("-")
-    if len(parts) >= 3:
-        try:
-            y, m, d = int(parts[0]), int(parts[1]), int(parts[2])
-            return datetime(y, m, d, 8, 0, 0, tzinfo=timezone.utc)
-        except (ValueError, IndexError):
-            pass
-    return None
+    parsed = parse_date_from_stem(stem, prefix)
+    if parsed is None:
+        return None
+    return datetime(parsed.year, parsed.month, parsed.day, 8, 0, 0, tzinfo=timezone.utc)
 
 
 def build_rss_feed(
