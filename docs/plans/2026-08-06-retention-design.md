@@ -46,8 +46,11 @@ both modules import, to avoid duplicating it).
     if present.
   - If the episode's `.html` exists, strip the inline podcast player block
     (`_podcast_player_html`'s output — the `<div class="podcast-player">…
-    </div>`, matched structurally) and the `og:image`/`twitter:image` meta
-    lines. Idempotent — if already stripped (e.g. rerunning the job), no-op.
+    </div>`, matched structurally) and the `og:image` (including its
+    `og:image:width`/`og:image:height` companions) and `twitter:image` meta
+    lines. `og:title`/`og:description` stay, and `twitter:card` is downgraded
+    from `summary_large_image` to `summary` since there's no image left.
+    Idempotent — if already stripped (e.g. rerunning the job), no-op.
   - Returns every path deleted or modified, for the caller's git-add list
     and summary printout.
 
