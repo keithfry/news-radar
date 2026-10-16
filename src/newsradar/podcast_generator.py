@@ -4,11 +4,11 @@ Requires ffmpeg on PATH and Kokoro TTS installed.
 """
 
 import json
+import os
 import shutil
 import subprocess
 import tempfile
-import threading
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from datetime import datetime
 from pathlib import Path
 
@@ -17,16 +17,26 @@ _FFMPEG = shutil.which("ffmpeg") or "/opt/homebrew/bin/ffmpeg"
 from .enricher import KOKORO_VOICES
 from .topics import Topic
 
-_tts_thread_local = threading.local()
-_ESPEAK_LOCK = threading.Lock()
+# One KPipeline per worker process. espeak-ng (used by Kokoro for phonemes)
+# isn't thread-safe, so TTS runs in separate processes, each with its own
+# espeak-ng state, instead of threads sharing one.
+_pipeline = None
+
+
+def _init_tts_worker(torch_threads: int) -> None:
+    """ProcessPoolExecutor initializer: cap torch threads and load Kokoro once."""
+    import torch
+    torch.set_num_threads(torch_threads)
+    _get_pipeline()
 
 
 def _get_pipeline():
-    """Return a thread-local KPipeline, creating it on first use per thread."""
-    if not hasattr(_tts_thread_local, "pipeline"):
+    """Return this process's KPipeline, creating it on first use."""
+    global _pipeline
+    if _pipeline is None:
         from kokoro import KPipeline
-        _tts_thread_local.pipeline = KPipeline(lang_code="a", repo_id="hexgrad/Kokoro-82M")
-    return _tts_thread_local.pipeline
+        _pipeline = KPipeline(lang_code="a", repo_id="hexgrad/Kokoro-82M")
+    return _pipeline
 
 
 def _voice_for(voice_index: int) -> str:
@@ -85,17 +95,16 @@ def _build_transcript_json(segments: list[dict]) -> str:
 
 
 def _tts_segment(text: str, voice: str, out_wav: Path) -> float:
-    """Synthesize text to WAV using thread-local Kokoro pipeline. Returns duration in seconds."""
+    """Synthesize text to WAV using this process's Kokoro pipeline. Returns duration in seconds."""
     import soundfile as sf
     import numpy as np
 
     audio_chunks = []
     sample_rate = 24000
 
-    with _ESPEAK_LOCK:
-        pipeline = _get_pipeline()
-        for _, _, audio in pipeline(text, voice=voice):
-            audio_chunks.append(audio)
+    pipeline = _get_pipeline()
+    for _, _, audio in pipeline(text, voice=voice):
+        audio_chunks.append(audio)
 
     if not audio_chunks:
         raise RuntimeError(f"Kokoro produced no audio for text: {text[:50]!r}")
@@ -237,21 +246,24 @@ def generate_podcast(
             for si, sent in enumerate(_split_sentences(outro_script)):
                 work.append(((_outro_idx, si), tmp / f"outro_{si:03d}.wav", sent, _voice_for(0), f"outro[{si}]"))
 
-        # Synthesize all sentences in parallel; results keyed by sort_key
+        # Synthesize all sentences in parallel worker processes; results keyed by sort_key.
+        # Split the CPU cores across workers so their torch thread pools don't oversubscribe.
         durations: dict[tuple, float] = {}
+        torch_threads = max(1, (os.cpu_count() or 1) // tts_workers)
 
-        def _synth(sort_key: tuple, wav_path: Path, text: str, voice: str, label: str) -> tuple[tuple, float]:
-            log(f"  [tts] {label} ({voice})...")
-            dur = _tts_segment(text, voice, wav_path)
-            return sort_key, dur
-
-        with ThreadPoolExecutor(max_workers=tts_workers) as executor:
+        with ProcessPoolExecutor(
+            max_workers=tts_workers,
+            initializer=_init_tts_worker,
+            initargs=(torch_threads,),
+        ) as executor:
             futures = {
-                executor.submit(_synth, *w): w[0] for w in work
+                executor.submit(_tts_segment, text, voice, wav_path): (sort_key, label, voice)
+                for sort_key, wav_path, text, voice, label in work
             }
             for future in as_completed(futures):
-                sort_key, dur = future.result()
-                durations[sort_key] = dur
+                sort_key, label, voice = futures[future]
+                durations[sort_key] = future.result()
+                log(f"  [tts] {label} ({voice}) done")
 
         # Reconstruct ordered wav list and compute sentence-level start times
         ordered = sorted(work, key=lambda w: w[0])
