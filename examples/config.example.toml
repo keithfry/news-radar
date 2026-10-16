@@ -32,6 +32,10 @@ rank_model = "ollama/qwen3.5:9b"
 # summarize_model. Uncomment to pin it independently of rank_model.
 dedup_model = "ollama/llama3.2"
 # dedup_model = "anthropic/claude-haiku-4-5"  # alternative: local claude CLI
+# Items per dedup call. 0 (or omitted) sends all items in one call so
+# duplicates can't land in separate batches. Set e.g. 40 for small-context
+# local models.
+dedup_batch_size = 0
 ad_detector_model = "ollama/ad-detector"
 ad_gate_enabled = true
 

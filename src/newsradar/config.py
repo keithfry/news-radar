@@ -47,6 +47,9 @@ class ModelsConfig:
     summarize_model: str = "llama3.2"
     rank_model: str = "qwen3.5:9b"
     dedup_model: str = "llama3.2"
+    # Items per dedup LLM call. 0 sends every item in one call, so duplicates
+    # can't hide in different batches; set >0 for models with small contexts.
+    dedup_batch_size: int = 0
     ad_detector_model: str = "ad-detector"
     ad_gate_enabled: bool = True
     # Topic relevance classification is a judgment call, not prose generation —
@@ -173,6 +176,9 @@ def load_config(config_path: str | Path, env_file: str | Path | None = None) -> 
         summarize_model=os.environ.get("SUMMARIZE_MODEL", models_raw.get("summarize_model", "llama3.2")),
         rank_model=rank_model,
         dedup_model=os.environ.get("DEDUP_MODEL", models_raw.get("dedup_model", "llama3.2")),
+        dedup_batch_size=int(
+            os.environ.get("DEDUP_BATCH_SIZE", models_raw.get("dedup_batch_size", 0))
+        ),
         ad_detector_model=os.environ.get(
             "AD_DETECTOR_MODEL", models_raw.get("ad_detector_model", "ad-detector")
         ),

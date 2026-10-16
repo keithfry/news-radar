@@ -320,7 +320,6 @@ def _keyword_duplicate_groups(items: list[dict], threshold: float = 0.40, min_sh
     return [g for g in groups.values() if len(g) >= 2]
 
 
-_DEDUP_BATCH_SIZE = 40
 _DEDUP_CONFIDENCE_THRESHOLD = 0.5
 
 
@@ -369,8 +368,11 @@ def _dedup_batch(batch: list[tuple[int, dict]], model: str) -> set[int]:
     return {orig_i for orig_i, _ in batch if str(orig_i) not in kept_ids}
 
 
-def deduplicate(items: list[dict], model: str) -> list[dict]:
-    """Remove near-duplicate items using keyword pre-pass + batched LLM filter."""
+def deduplicate(items: list[dict], model: str, batch_size: int | None = 0) -> list[dict]:
+    """Remove near-duplicate items using keyword pre-pass + batched LLM filter.
+
+    batch_size is items per LLM call; 0 or None sends all items in one call.
+    """
     if len(items) <= 1:
         return items
 
@@ -389,9 +391,10 @@ def deduplicate(items: list[dict], model: str) -> list[dict]:
         return [item for _, item in surviving]
 
     # Batched LLM pass over surviving items
+    step = batch_size or len(surviving)
     llm_drop: set[int] = set()
-    for start in range(0, len(surviving), _DEDUP_BATCH_SIZE):
-        batch = surviving[start:start + _DEDUP_BATCH_SIZE]
+    for start in range(0, len(surviving), step):
+        batch = surviving[start:start + step]
         dropped = _dedup_batch(batch, model)
         llm_drop |= dropped
 

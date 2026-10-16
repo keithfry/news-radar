@@ -279,6 +279,7 @@ def _run_topic(
     log(f"Rank model:      {models.rank_model}")
     log(f"Classify model:  {models.classify_model}")
     log(f"Dedup model:     {models.dedup_model}")
+    log(f"Dedup batch:     {models.dedup_batch_size or 'all at once'}")
     log(f"LLM workers:     {config.pipeline.llm_workers}  (set OLLAMA_NUM_PARALLEL={config.pipeline.llm_workers} to match)")
     log(f"URL workers:     {config.pipeline.url_workers}")
     log(f"TTS workers:     {config.pipeline.tts_workers}")
@@ -411,7 +412,7 @@ def _run_topic(
     # --- Step 5: Deduplicate ---
     log(f"── Step 5: Deduplicating {len(all_items)} items "
         f"({len(processed_emails)} newsletters + {len(processed_links)} linked + {len(processed_rss)} RSS) ──")
-    all_items = deduplicate(all_items, models.dedup_model)
+    all_items = deduplicate(all_items, models.dedup_model, models.dedup_batch_size)
     log(f"  {len(all_items)} items after deduplication")
     log("")
 
