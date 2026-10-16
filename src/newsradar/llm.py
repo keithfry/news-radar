@@ -7,6 +7,8 @@ treated as an Ollama model name — Ollama is the default provider.
 """
 
 import functools
+import html
+import itertools
 import json
 import os
 import re
@@ -375,14 +377,17 @@ _DEDUP_MIN_BATCH = 10
 # More than this fraction dropped from a batch of _DEDUP_MIN_BATCH+ items is
 # treated as a bad response, not a real result.
 _DEDUP_MAX_DROP_FRACTION = 0.5
-# An empty result for a batch this big is suspicious (the model sometimes
-# answers "no duplicates" on a full day), so it is retried once to confirm.
-_DEDUP_RETRY_MIN_BATCH = 40
+# Each batch is deduplicated this many times; an item is dropped only when
+# most successful runs drop it. A single run misses different duplicates on
+# identical input and sometimes cites the wrong ids.
+_DEDUP_VOTES = 3
 _DEDUP_MIN_NUM_CTX = 8192
 _DEDUP_MAX_NUM_CTX = 65536
 # Ollama silently trims prompts that overflow num_ctx; a prompt filling this
 # much of the window is assumed trimmed.
 _DEDUP_TRUNCATION_FRACTION = 0.9
+# A truncated echo must keep at least this many characters to match.
+_DEDUP_MIN_ECHO_PREFIX = 20
 
 
 class _DedupFailed(Exception):
@@ -397,16 +402,33 @@ def _dedup_num_ctx(prompt: str) -> int:
     return max(_DEDUP_MIN_NUM_CTX, min(_DEDUP_MAX_NUM_CTX, want))
 
 
-def _dedup_batch(batch: list[tuple[int, dict]], model: str) -> set[int]:
-    """Send one batch to LLM. Returns original indices to DROP.
+def _normalize_title(title: str) -> str:
+    return " ".join(re.sub(r"[^\w\s]", " ", html.unescape(title).casefold()).split())
+
+
+def _titles_match(echoed: str, actual: str) -> bool:
+    """True when the title the model echoed back is the one at that id.
+    Ignores case, punctuation, quote style and HTML entities, and allows a
+    truncated echo. Anything else is treated as a different article, which
+    errs toward keeping items."""
+    e, a = _normalize_title(echoed), _normalize_title(actual)
+    if not e:
+        return False
+    return e == a or (len(e) >= _DEDUP_MIN_ECHO_PREFIX and a.startswith(e))
+
+
+def _dedup_batch(batch: list[tuple[int, dict]], model: str) -> dict[int, int]:
+    """Send one batch to LLM. Returns {dropped original index: kept index}.
 
     The model lists groups of duplicates and which member of each to keep;
     anything it leaves out is kept, so an incomplete reply errs toward
-    keeping items. Raises _DedupFailed when the reply can't be trusted
+    keeping items. Each member carries its title back, and a member whose
+    title doesn't match its id is ignored, so a miscounted id can't drop an
+    unrelated story. Raises _DedupFailed when the reply can't be trusted
     (server error, truncation, unparseable or implausible output).
     """
     if len(batch) <= 1:
-        return set()
+        return {}
 
     payload = [{"id": str(orig_i), "title": item["title"]} for orig_i, item in batch]
     prompt = (
@@ -416,7 +438,8 @@ def _dedup_batch(batch: list[tuple[int, dict]], model: str) -> set[int]:
         "A shared product name + version (e.g. 'Gemma 4 12B') means duplicate. "
         "Identical or near-identical titles are always duplicates.\n\n"
         "Return a JSON object with key 'groups': one object per story that appears "
-        "more than once. Each object: {\"ids\": [<every id covering that story>], "
+        "more than once. Each object: {\"members\": [{\"id\": \"<id>\", \"title\": "
+        "\"<that article's title, copied exactly>\"}, ...every article covering that story], "
         "\"keep\": \"<id with the most informative title>\", \"confidence\": <0.0-1.0>} "
         "where confidence is how certain you are they cover the same story. "
         "List every member of each group. Articles that appear only once must not "
@@ -444,16 +467,25 @@ def _dedup_batch(batch: list[tuple[int, dict]], model: str) -> set[int]:
     if not isinstance(groups, list):
         raise _DedupFailed(f"no 'groups' list in reply: {result.text[:200]!r}")
 
+    titles = {str(orig_i): item["title"] for orig_i, item in batch}
     valid_ids = {str(orig_i): orig_i for orig_i, _ in batch}
     accepted: list[tuple[int, set[int]]] = []
+    mismatched = 0
     for group in groups:
-        if not isinstance(group, dict) or not isinstance(group.get("ids"), list):
+        if not isinstance(group, dict) or not isinstance(group.get("members"), list):
             continue
         try:
             confidence = float(group.get("confidence", 1.0))
         except (TypeError, ValueError):
             continue
-        members = {valid_ids[str(i)] for i in group["ids"] if str(i) in valid_ids}
+        members: set[int] = set()
+        for m in group["members"]:
+            if not isinstance(m, dict) or str(m.get("id")) not in valid_ids:
+                continue
+            if not _titles_match(str(m.get("title", "")), titles[str(m["id"])]):
+                mismatched += 1
+                continue
+            members.add(valid_ids[str(m["id"])])
         keep = valid_ids.get(str(group.get("keep", "")))
         if keep is None or keep not in members or len(members) < 2:
             continue
@@ -461,10 +493,13 @@ def _dedup_batch(batch: list[tuple[int, dict]], model: str) -> set[int]:
             continue
         accepted.append((keep, members))
 
+    if mismatched:
+        print(f"[dedup] ignored {mismatched} group member(s) whose title didn't match its id", file=sys.stderr)
+
     # An item kept by any group survives, even if another group lists it as
     # a duplicate — so overlapping groups can't remove a whole story.
     kept = {keep for keep, _ in accepted}
-    dropped = {i for _, members in accepted for i in members} - kept
+    dropped = {i: keep for keep, members in accepted for i in members if i not in kept}
 
     if len(batch) >= _DEDUP_MIN_BATCH and len(dropped) > _DEDUP_MAX_DROP_FRACTION * len(batch):
         raise _DedupFailed(f"dropped {len(dropped)}/{len(batch)} items — implausible")
@@ -472,21 +507,70 @@ def _dedup_batch(batch: list[tuple[int, dict]], model: str) -> set[int]:
     return dropped
 
 
+def _dedup_voted(batch: list[tuple[int, dict]], model: str) -> set[int]:
+    """Run _dedup_batch _DEDUP_VOTES times and drop what most runs agree on.
+
+    Votes are on pairs: two items count as the same story when most
+    successful runs group them, so runs that agree on a story but keep
+    different members still agree. Each resulting group keeps the member
+    runs chose to keep most often (the earliest on a tie) and drops the rest.
+    Failed runs don't vote; fewer than two good runs (or one, when voting is
+    off) raises _DedupFailed.
+    """
+    runs: list[dict[int, int]] = []
+    errors: list[str] = []
+    for _ in range(_DEDUP_VOTES):
+        try:
+            runs.append(_dedup_batch(batch, model))
+        except _DedupFailed as exc:
+            errors.append(str(exc))
+    if len(runs) < min(2, _DEDUP_VOTES):
+        raise _DedupFailed("; ".join(errors) or "no successful dedup runs")
+
+    needed = len(runs) // 2 + 1
+    pair_votes: dict[tuple[int, int], int] = {}
+    keep_votes: dict[int, int] = {}
+    for run in runs:
+        groups: dict[int, set[int]] = {}
+        for dropped_i, keep in run.items():
+            groups.setdefault(keep, {keep}).add(dropped_i)
+        for keep, members in groups.items():
+            keep_votes[keep] = keep_votes.get(keep, 0) + 1
+            for pair in itertools.combinations(sorted(members), 2):
+                pair_votes[pair] = pair_votes.get(pair, 0) + 1
+
+    parent: dict[int, int] = {}
+
+    def find(i: int) -> int:
+        while parent.setdefault(i, i) != i:
+            i = parent[i]
+        return i
+
+    for (i, j), n in pair_votes.items():
+        if n >= needed:
+            parent[find(i)] = find(j)
+
+    stories: dict[int, list[int]] = {}
+    for i in parent:
+        stories.setdefault(find(i), []).append(i)
+    dropped: set[int] = set()
+    for members in stories.values():
+        if len(members) < 2:
+            continue
+        keep = min(members, key=lambda i: (-keep_votes.get(i, 0), i))
+        dropped.update(i for i in members if i != keep)
+
+    if len(runs) > 1:
+        print(f"[dedup] {len(runs)} runs dropped {[len(r) for r in runs]} items; "
+              f"{len(dropped)} agreed by {needed}+ runs", file=sys.stderr)
+    return dropped
+
+
 def _dedup_with_fallback(batch: list[tuple[int, dict]], model: str) -> set[int]:
     """Dedup a batch, splitting it in half on failure. Duplicates that land
     in different halves are missed, but that beats keeping everything."""
     try:
-        dropped = _dedup_batch(batch, model)
-        if not dropped and len(batch) >= _DEDUP_RETRY_MIN_BATCH:
-            print(f"[dedup] validation retry: {len(batch)} items came back with no duplicates "
-                  "— asking again to confirm", file=sys.stderr)
-            dropped = _dedup_batch(batch, model)
-            if dropped:
-                print(f"[dedup] validation retry found {len(dropped)} duplicate(s) "
-                      "— first answer was wrong, using retry", file=sys.stderr)
-            else:
-                print("[dedup] validation retry confirmed no duplicates", file=sys.stderr)
-        return dropped
+        return _dedup_voted(batch, model)
     except _DedupFailed as exc:
         if len(batch) < 2 * _DEDUP_MIN_BATCH:
             print(f"[warn] [dedup] {len(batch)} items failed ({exc}) — keeping all", file=sys.stderr)
@@ -533,6 +617,10 @@ def deduplicate(
 ) -> list[dict]:
     """Remove duplicate items: exact-title pre-pass, then batched LLM filter.
 
+    arXiv papers (``_is_arxiv``) go through the exact-title pass, which
+    catches cross-listed papers, but not the LLM pass: they don't duplicate
+    news stories and only lengthen the list.
+
     batch_size is items per LLM call; 0 or None sends all items in one call.
     When removed is given, each dropped item is appended to it with its reason.
     """
@@ -551,11 +639,14 @@ def deduplicate(
     if pre_drop:
         print(f"[dedup] exact-title pre-pass removed {len(pre_drop)} items", file=sys.stderr)
 
-    surviving = [(orig_i, item) for orig_i, item in enumerate(items) if orig_i not in pre_drop]
+    surviving = [
+        (orig_i, item) for orig_i, item in enumerate(items)
+        if orig_i not in pre_drop and not item.get("_is_arxiv")
+    ]
     if len(surviving) <= 1:
         if removed is not None:
             removed.extend(removal_record(items[i], "duplicate (same title)") for i in sorted(pre_drop))
-        return [item for _, item in surviving]
+        return [item for i, item in enumerate(items) if i not in pre_drop]
 
     # Batched LLM pass over surviving items
     step = batch_size or len(surviving)
