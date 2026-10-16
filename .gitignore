@@ -9,3 +9,4 @@ uv.lock
 **/*.pyc
 dist/
 *.egg-info/
+.worktrees/
