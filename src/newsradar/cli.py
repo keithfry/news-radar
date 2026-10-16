@@ -41,6 +41,8 @@ from .llm import (
     classify_topic,
     deduplicate,
     llm_stats,
+    removal_record,
+    removed_counts,
     summarize,
     tag,
     unload_all_models,
@@ -110,7 +112,9 @@ def _is_webinar_summary(summary: str) -> bool:
     return any(phrase in lowered for phrase in _WEBINAR_PHRASES)
 
 
-def _process_one(idx: int, total: int, item: dict, source_type: str, topic: Topic, config: Config) -> dict | None:
+def _process_one(
+    idx: int, total: int, item: dict, source_type: str, topic: Topic, config: Config, removed: list[dict],
+) -> dict | None:
     models = effective_models(config, topic)
     title = item.get("title", "").strip()
     existing_text = item.get("body") or item.get("summary", "")
@@ -126,12 +130,14 @@ def _process_one(idx: int, total: int, item: dict, source_type: str, topic: Topi
 
     if _is_advertisement(title, existing_text):
         log(f"    [{idx}] → skip (advertisement)")
+        removed.append(removal_record(item, "advertisement"))
         return None
 
     if models.ad_gate_enabled:
         is_ad, ad_reason = classify_ad(title, existing_text[:1000], models.ad_detector_model)
         if is_ad:
             log(f"    [{idx}] → skip (ad gate: {ad_reason})")
+            removed.append(removal_record(item, "ad detector"))
             return None
 
     lowered = (title + " " + existing_text).lower()
@@ -140,6 +146,7 @@ def _process_one(idx: int, total: int, item: dict, source_type: str, topic: Topi
         log(f"    [{idx}] → classifying with LLM (no {topic.display_name} keywords matched)...")
         if not classify_topic(title, existing_text[:500], models.classify_model, topic):
             log(f"    [{idx}] → skip (not {topic.display_name}-related)")
+            removed.append(removal_record(item, "off-topic"))
             return None
         log(f"    [{idx}] → classified as {topic.display_name}-related")
 
@@ -148,6 +155,7 @@ def _process_one(idx: int, total: int, item: dict, source_type: str, topic: Topi
 
     if _is_webinar_summary(summary_text):
         log(f"    [{idx}] → skip (webinar/promotional event)")
+        removed.append(removal_record(item, "webinar"))
         return None
 
     log(f"    [{idx}] → tagging...")
@@ -166,7 +174,9 @@ def _process_one(idx: int, total: int, item: dict, source_type: str, topic: Topi
     }
 
 
-def _process_items(raw_items: list[dict], source_type: str, topic: Topic, config: Config) -> list[dict]:
+def _process_items(
+    raw_items: list[dict], source_type: str, topic: Topic, config: Config, removed: list[dict],
+) -> list[dict]:
     if not raw_items:
         return []
 
@@ -175,7 +185,7 @@ def _process_items(raw_items: list[dict], source_type: str, topic: Topic, config
 
     with ThreadPoolExecutor(max_workers=config.pipeline.llm_workers) as executor:
         futures = {
-            executor.submit(_process_one, idx, total, item, source_type, topic, config): idx
+            executor.submit(_process_one, idx, total, item, source_type, topic, config, removed): idx
             for idx, item in enumerate(raw_items, 1)
         }
         for future in as_completed(futures):
@@ -224,6 +234,15 @@ def _fetch_links_parallel(email_items: list[dict], config: Config) -> list[dict]
                 fetched.append(result)
 
     return fetched
+
+
+def _log_removed_summary(removed: list[dict], topic: Topic) -> None:
+    log(f"── Removed items ({topic.display_name}): {len(removed)} ──")
+    for reason, count in removed_counts(removed):
+        log(f"  {count:4d}  {reason}")
+        for r in removed:
+            if r["reason"] == reason:
+                log(f"          - [{r['source']}] {r['title'][:80]}")
 
 
 def _stop_models(log_fn) -> None:
@@ -388,19 +407,20 @@ def _run_topic(
 
     # --- Step 2: Process emails ---
     log(f"── Step 2: Processing {len(email_items)} emails ({config.pipeline.llm_workers} workers) [{topic.display_name} filter] ──")
-    processed_emails = _process_items(email_items, "email", topic, config)
+    removed: list[dict] = []
+    processed_emails = _process_items(email_items, "email", topic, config, removed)
     log(f"  {len(processed_emails)}/{len(email_items)} emails kept")
     log("")
 
     # --- Step 3: Process linked articles ---
     log(f"── Step 3: Processing {len(linked_articles)} linked articles ({config.pipeline.llm_workers} workers) [{topic.display_name} filter] ──")
-    processed_links = _process_items(linked_articles, "rss", topic, config)
+    processed_links = _process_items(linked_articles, "rss", topic, config, removed)
     log(f"  {len(processed_links)}/{len(linked_articles)} linked articles kept")
     log("")
 
     # --- Step 4: Process RSS articles ---
     log(f"── Step 4: Processing {len(rss_articles)} RSS articles ({config.pipeline.llm_workers} workers) [{topic.display_name} filter] ──")
-    processed_rss = _process_items(rss_articles, "rss", topic, config)
+    processed_rss = _process_items(rss_articles, "rss", topic, config, removed)
     log(f"  {len(processed_rss)}/{len(rss_articles)} articles kept")
     log("")
 
@@ -412,7 +432,7 @@ def _run_topic(
     # --- Step 5: Deduplicate ---
     log(f"── Step 5: Deduplicating {len(all_items)} items "
         f"({len(processed_emails)} newsletters + {len(processed_links)} linked + {len(processed_rss)} RSS) ──")
-    all_items = deduplicate(all_items, models.dedup_model, models.dedup_batch_size)
+    all_items = deduplicate(all_items, models.dedup_model, models.dedup_batch_size, removed=removed)
     log(f"  {len(all_items)} items after deduplication")
     log("")
 
@@ -449,7 +469,7 @@ def _run_topic(
     def _gen_html():
         try:
             log("── Step 7a: Generating HTML ──")
-            log(f"  Newsletters: {len(newsletters)}, Articles: {len(articles)}, Papers: {len(papers)}, Errors: {len(rss_errors)}")
+            log(f"  Newsletters: {len(newsletters)}, Articles: {len(articles)}, Papers: {len(papers)}, Errors: {len(rss_errors)}, Removed: {len(removed)}")
             ym_dir = as_of.strftime("%Y-%m")
             date_str = as_of.strftime("%Y-%m-%d")
             _url_base = f"{config.site.base_url}/{config.site.public_path_prefix}".rstrip("/") if config.site.public_path_prefix else config.site.base_url
@@ -458,7 +478,7 @@ def _run_topic(
             _og_url = None if args.no_podcast else f"{_url_base}/{topic.output_dir}/{ym_dir}/{file_prefix}-{date_str}.og.jpg"
             html = generate_html(
                 newsletters=newsletters, articles=articles,
-                papers=papers, errors=rss_errors, date=as_of,
+                papers=papers, errors=rss_errors, removed=removed, date=as_of,
                 topic_label=topic.display_name,
                 mp3_url=_mp3_url, podcast_rss_url=_rss_url, og_image_url=_og_url,
             )
@@ -518,6 +538,10 @@ def _run_topic(
         author_name=config.site.author_name, output_dir_rel=_rss_output_dir_rel, log=log,
     )
     out_paths.append(rss_path)
+
+    log("")
+    _log_removed_summary(removed, topic)
+    log("")
 
     call_count, total_duration = llm_stats()
     log(f"LLM calls: {call_count}  total time: {total_duration:.3f}s")

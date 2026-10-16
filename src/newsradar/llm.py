@@ -483,10 +483,30 @@ def _exact_title_duplicates(items: list[dict]) -> set[int]:
     return {i for i, key in enumerate(keys) if key and i not in kept}
 
 
-def deduplicate(items: list[dict], model: str, batch_size: int | None = 0) -> list[dict]:
+def removal_record(item: dict, reason: str) -> dict:
+    return {
+        "title": item.get("title", ""),
+        "link": item.get("link", ""),
+        "source": item.get("source", ""),
+        "reason": reason,
+    }
+
+
+def removed_counts(removed: list[dict]) -> list[tuple[str, int]]:
+    """(reason, count) pairs for removal records, most common first."""
+    counts: dict[str, int] = {}
+    for r in removed:
+        counts[r["reason"]] = counts.get(r["reason"], 0) + 1
+    return sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))
+
+
+def deduplicate(
+    items: list[dict], model: str, batch_size: int | None = 0, removed: list[dict] | None = None,
+) -> list[dict]:
     """Remove duplicate items: exact-title pre-pass, then batched LLM filter.
 
     batch_size is items per LLM call; 0 or None sends all items in one call.
+    When removed is given, each dropped item is appended to it with its reason.
     """
     if len(items) <= 1:
         return items
@@ -505,6 +525,8 @@ def deduplicate(items: list[dict], model: str, batch_size: int | None = 0) -> li
 
     surviving = [(orig_i, item) for orig_i, item in enumerate(items) if orig_i not in pre_drop]
     if len(surviving) <= 1:
+        if removed is not None:
+            removed.extend(removal_record(items[i], "duplicate (same title)") for i in sorted(pre_drop))
         return [item for _, item in surviving]
 
     # Batched LLM pass over surviving items
@@ -516,6 +538,10 @@ def deduplicate(items: list[dict], model: str, batch_size: int | None = 0) -> li
 
     if llm_drop:
         print(f"[dedup] LLM pass removed {len(llm_drop)} items", file=sys.stderr)
+
+    if removed is not None:
+        removed.extend(removal_record(items[i], "duplicate (same title)") for i in sorted(pre_drop))
+        removed.extend(removal_record(items[i], "duplicate") for i in sorted(llm_drop))
 
     all_drop = pre_drop | llm_drop
     return [item for i, item in enumerate(items) if i not in all_drop]

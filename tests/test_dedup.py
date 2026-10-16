@@ -312,3 +312,18 @@ def test_retry_failure_falls_back_to_split(chat):
     responses.append(llm.ChatResult("", done_reason="length"))
     llm.deduplicate(_items(40), "m")
     assert [len(c["ids"]) for c in calls] == [40, 40, 20, 20]
+
+
+# --- Removed-item tracking ------------------------------------------------------
+
+
+def test_records_removed_items(monkeypatch):
+    monkeypatch.setattr(llm, "_DEDUP_RETRY_MIN_BATCH", 10**9)
+    monkeypatch.setattr(llm, "_dedup_batch", lambda batch, model: {1})
+    items = [{"title": "A"}, {"title": "B"}, {"title": "a"}, {"title": "C"}]
+    removed: list[dict] = []
+    llm.deduplicate(items, "m", removed=removed)
+    assert sorted((r["title"], r["reason"]) for r in removed) == [
+        ("B", "duplicate"),
+        ("a", "duplicate (same title)"),
+    ]

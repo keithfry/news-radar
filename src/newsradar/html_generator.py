@@ -6,6 +6,8 @@ The LLM produces summaries and tags; this module handles all HTML rendering.
 from datetime import datetime
 from html import escape
 
+from .llm import removed_counts
+
 # Tag key → (CSS class, display label)
 TAG_META: dict[str, tuple[str, str]] = {
     "policy":   ("t-policy",   "Policy"),
@@ -92,6 +94,14 @@ _CSS = """\
   .problem-feeds li { font-size: 13px; color: #64748b; margin-bottom: 8px; }
   .problem-feeds li a { color: #2563eb; }
   .problem-feeds .error-reason { color: #dc2626; font-style: italic; }
+  a.stat-pill { text-decoration: none; }
+  a.stat-pill:hover { background: rgba(255,255,255,0.14); }
+  .removed-items { border: 1px solid #e2e8f0; background: white; border-radius: 10px; padding: 20px 22px; margin-top: 24px; }
+  .removed-items > summary { font-size: 15px; font-weight: 700; color: #475569; cursor: pointer; }
+  .removed-items h3 { font-size: 12px; font-weight: 800; letter-spacing: 1.2px; text-transform: uppercase; color: #94a3b8; margin: 18px 0 8px; }
+  .removed-items ul { list-style: none; }
+  .removed-items li { font-size: 13px; color: #64748b; margin-bottom: 6px; }
+  .removed-items li a { color: #2563eb; }
   footer { text-align: center; font-size: 12px; color: #94a3b8; padding: 28px 20px 40px; border-top: 1px solid #e2e8f0; margin-top: 16px; }
   .filter-bar { background: white; border-bottom: 1px solid #e2e8f0; padding: 12px 20px; display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
   .filter-chip { font-size: 11px; font-weight: 700; padding: 4px 12px; border-radius: 12px; cursor: pointer; border: 2px solid transparent; transition: border-color 0.15s, opacity 0.15s; }
@@ -171,6 +181,7 @@ def generate_html(
     papers: list[dict],
     errors: list[dict],
     date: datetime,
+    removed: list[dict] | None = None,
     topic_label: str = "AI",
     source_label: str = "techradar-agent",
     mp3_url: str | None = None,
@@ -184,12 +195,21 @@ def generate_html(
     dateline = f"{day_str} &mdash; {time_str}"
     date_title = date.strftime("%B %-d, %Y")
 
+    removed = removed or []
     error_count = len(errors)
+    removed_count = len(removed)
+    removed_label = f'🗑 {removed_count} Removed'
+    removed_pill = (
+        f'    <a class="stat-pill" href="#removed-items">{removed_label}</a>\n'
+        if removed else
+        f'    <span class="stat-pill">{removed_label}</span>\n'
+    )
     stats = (
         f'    <span class="stat-pill">📬 {len(newsletters)} Newsletter{"s" if len(newsletters) != 1 else ""}</span>\n'
         f'    <span class="stat-pill">📰 {len(articles)} Article{"s" if len(articles) != 1 else ""}</span>\n'
         f'    <span class="stat-pill">🔬 {len(papers)} Paper{"s" if len(papers) != 1 else ""}</span>\n'
         f'    <span class="stat-pill">{"✅" if error_count == 0 else "⚠️"} {error_count} Feed Error{"s" if error_count != 1 else ""}</span>\n'
+        + removed_pill
     )
 
     # Collect tags that actually appear in this digest, sorted by display label
@@ -311,6 +331,28 @@ def generate_html(
             )
         parts.append('    </ul>\n  </div>\n')
 
+    # --- Removed Items ---
+    if removed:
+        parts.append(
+            f'\n  <details class="removed-items" id="removed-items">\n'
+            f'    <summary>🗑 Removed Items ({removed_count})</summary>\n'
+        )
+        for reason, count in removed_counts(removed):
+            parts.append(f'    <h3>{escape(reason.capitalize())} ({count})</h3>\n    <ul>\n')
+            for r in removed:
+                if r["reason"] != reason:
+                    continue
+                title = escape(r.get("title") or "(untitled)")
+                link = r.get("link", "")
+                title_html = (
+                    f'<a href="{escape(link)}" target="_blank" rel="noopener">{title}</a>'
+                    if link else title
+                )
+                src = escape(r.get("source", ""))
+                parts.append(f'      <li><strong>{src}</strong> — {title_html}</li>\n')
+            parts.append('    </ul>\n')
+        parts.append('  </details>\n')
+
     parts.append("\n</div>\n\n")
 
     # --- Footer ---
@@ -322,6 +364,8 @@ def generate_html(
         f"Sources: Gmail + {feed_count} RSS items via {source_label}\n"
         f"</footer>\n\n"
         f"<script>\n(function(){{\n"
+        f"  const removedLink = document.querySelector('a[href=\"#removed-items\"]');\n"
+        f"  if (removedLink) removedLink.addEventListener('click', () => {{ document.getElementById('removed-items').open = true; }});\n"
         f"  const active = new Set();\n"
         f"  document.querySelectorAll('.filter-chip').forEach(chip => {{\n"
         f"    chip.addEventListener('click', () => {{\n"
