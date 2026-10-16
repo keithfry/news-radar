@@ -6,6 +6,7 @@ Model names use an optional "provider/model" prefix (e.g. "ollama/llama3.2:3b",
 treated as an Ollama model name — Ollama is the default provider.
 """
 
+import functools
 import json
 import os
 import re
@@ -226,9 +227,43 @@ def classify_topic(title: str, summary: str, model: str, topic: Topic) -> bool:
         return topic.fail_open
 
 
+@functools.lru_cache(maxsize=None)
+def _has_system_prompt(model: str) -> bool:
+    """True when an Ollama model ships its own SYSTEM prompt, like the packaged
+    ad-detector. False for other providers or when Ollama can't be asked."""
+    provider, name = _parse_model(model)
+    if provider != "ollama":
+        return False
+    try:
+        modelfile = ollama.show(name).modelfile or ""
+    except Exception:
+        return False
+    return any(line.startswith("SYSTEM") for line in modelfile.splitlines())
+
+
 def classify_ad(title: str, summary: str, model: str) -> tuple[bool, str]:
-    """Return (is_ad, reason). Fails open — returns (False, 'parse error') on JSON failure."""
-    prompt = (
+    """Return (is_ad, reason). Fails open — returns (False, 'parse error') on JSON failure.
+
+    A model with its own SYSTEM prompt (the ad-detector) already carries the
+    rules and examples, so it gets only the item. Repeating the instructions
+    roughly doubles prompt time and overflows its 4096-token context on long
+    items. A base model gets the full instructions inline.
+    """
+    if _has_system_prompt(model):
+        prompt = f"Title: {title}\nSummary: {summary}"
+    else:
+        prompt = _ad_instructions(title, summary)
+    raw = _chat(prompt, model, json_mode=True)
+    try:
+        data = _parse_json(raw)
+        return bool(data.get("is_ad", False)), str(data.get("reason", ""))
+    except (json.JSONDecodeError, AttributeError):
+        print(f"[warn] classify_ad() failed to parse JSON: {raw!r}", file=sys.stderr)
+        return False, "parse error"
+
+
+def _ad_instructions(title: str, summary: str) -> str:
+    return (
         "You are a content classifier. Identify promotional, advertising, or non-editorial "
         "content that should be excluded from a curated AI/tech news feed.\n\n"
         "Mark is_ad: true if the item primarily does ONE of these:\n\n"
@@ -283,13 +318,6 @@ def classify_ad(title: str, summary: str, model: str) -> tuple[bool, str]:
         f"Summary: {summary}\n\n"
         'Respond ONLY with JSON: {"is_ad": true/false, "reason": "brief explanation"}'
     )
-    raw = _chat(prompt, model, json_mode=True)
-    try:
-        data = _parse_json(raw)
-        return bool(data.get("is_ad", False)), str(data.get("reason", ""))
-    except (json.JSONDecodeError, AttributeError):
-        print(f"[warn] classify_ad() failed to parse JSON: {raw!r}", file=sys.stderr)
-        return False, "parse error"
 
 
 _STOPWORDS = {

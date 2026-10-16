@@ -5,6 +5,8 @@ from __future__ import annotations
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
+import pytest
+
 from newsradar import cli, llm
 from newsradar.config import load_config
 from newsradar.html_generator import generate_html
@@ -13,6 +15,13 @@ from conftest import EXAMPLE_CONFIG
 
 _config = load_config(EXAMPLE_CONFIG)
 _TOPIC = _config.topic("ai")
+
+
+@pytest.fixture(autouse=True)
+def _fresh_ad_cache():
+    cli._ad_verdicts.clear()
+    yield
+    cli._ad_verdicts.clear()
 
 
 def _no_models(monkeypatch):

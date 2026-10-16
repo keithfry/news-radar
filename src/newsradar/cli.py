@@ -112,6 +112,24 @@ def _is_webinar_summary(summary: str) -> bool:
     return any(phrase in lowered for phrase in _WEBINAR_PHRASES)
 
 
+# Ad verdicts depend only on the item, not the topic. Emails and linked
+# articles go through every topic, so remember each verdict for the run.
+_ad_verdicts: dict[tuple[str, str, str], tuple[bool, str]] = {}
+_ad_verdicts_lock = threading.Lock()
+
+
+def _classify_ad_once(title: str, text: str, model: str) -> tuple[bool, str]:
+    key = (model, title, text)
+    with _ad_verdicts_lock:
+        cached = _ad_verdicts.get(key)
+    if cached is not None:
+        return cached
+    verdict = classify_ad(title, text, model)
+    with _ad_verdicts_lock:
+        _ad_verdicts[key] = verdict
+    return verdict
+
+
 def _process_one(
     idx: int, total: int, item: dict, source_type: str, topic: Topic, config: Config, removed: list[dict],
 ) -> dict | None:
@@ -133,8 +151,9 @@ def _process_one(
         removed.append(removal_record(item, "advertisement"))
         return None
 
-    if models.ad_gate_enabled:
-        is_ad, ad_reason = classify_ad(title, existing_text[:1000], models.ad_detector_model)
+    # arXiv papers are never ads, so they skip the LLM ad gate.
+    if models.ad_gate_enabled and not is_arxiv(item.get("source", "")):
+        is_ad, ad_reason = _classify_ad_once(title, existing_text[:1000], models.ad_detector_model)
         if is_ad:
             log(f"    [{idx}] → skip (ad gate: {ad_reason})")
             removed.append(removal_record(item, "ad detector"))

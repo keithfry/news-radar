@@ -13,6 +13,15 @@ item received
 Set `AD_GATE_ENABLED=0` in `.env` to disable the LLM gate (e.g. for a speed test).
 Set `AD_DETECTOR_MODEL=qwen3.5:9b` in `.env` to use the base model directly (no system prompt).
 
+The packaged `ad-detector` model carries the rules and examples in its Modelfile
+`SYSTEM` prompt, so `classify_ad()` sends it only `Title: ...\nSummary: ...`. A
+model without a `SYSTEM` prompt (such as base `qwen3.5:9b`) gets the full
+instructions inline. Sending both used to double prompt time and overflow the
+model's 4096-token context on long items.
+
+arXiv items skip the LLM gate. Each verdict is remembered for the run, so emails
+and linked articles are checked once, not once per topic.
+
 ## Ad Categories the Gate Catches
 
 | Category | Example signals |
