@@ -14,6 +14,7 @@ import subprocess
 import sys
 import threading
 import time
+from dataclasses import dataclass
 
 import httpx
 import json_repair
@@ -54,14 +55,30 @@ def _parse_model(model: str) -> tuple[str, str]:
     return "ollama", model
 
 
+@dataclass
+class ChatResult:
+    """LLM reply plus the metadata needed to spot truncation.
+
+    done_reason and prompt_eval_count come from Ollama; they're None for
+    providers that don't report them.
+    """
+    text: str
+    done_reason: str | None = None
+    prompt_eval_count: int | None = None
+
+
 def _chat(prompt: str, model: str, json_mode: bool = False, think: bool = False, num_ctx: int | None = None, _retries: int = 3) -> str:
+    return _chat_meta(prompt, model, json_mode=json_mode, think=think, num_ctx=num_ctx, _retries=_retries).text
+
+
+def _chat_meta(prompt: str, model: str, json_mode: bool = False, think: bool = False, num_ctx: int | None = None, _retries: int = 3) -> ChatResult:
     provider, model_name = _parse_model(model)
     if provider == "anthropic":
-        return _chat_anthropic(prompt, model_name, json_mode=json_mode)
+        return ChatResult(_chat_anthropic(prompt, model_name, json_mode=json_mode))
     return _chat_ollama(prompt, model_name, json_mode=json_mode, think=think, num_ctx=num_ctx, _retries=_retries, _log_model=model)
 
 
-def _chat_ollama(prompt: str, model: str, json_mode: bool = False, think: bool = False, num_ctx: int | None = None, _retries: int = 3, _log_model: str | None = None) -> str:
+def _chat_ollama(prompt: str, model: str, json_mode: bool = False, think: bool = False, num_ctx: int | None = None, _retries: int = 3, _log_model: str | None = None) -> ChatResult:
     global _llm_call_count, _llm_total_duration
 
     kwargs: dict = {"think": think}
@@ -94,7 +111,11 @@ def _chat_ollama(prompt: str, model: str, json_mode: bool = False, think: bool =
 
     print(f"  [llm:{cnt}] {_log_model or model} {elapsed:.3f}s", flush=True)
 
-    return response["message"]["content"].strip()
+    return ChatResult(
+        text=response["message"]["content"].strip(),
+        done_reason=response.get("done_reason"),
+        prompt_eval_count=response.get("prompt_eval_count"),
+    )
 
 
 def _chat_anthropic(prompt: str, model: str, json_mode: bool = False) -> str:
@@ -321,51 +342,117 @@ def _keyword_duplicate_groups(items: list[dict], threshold: float = 0.40, min_sh
 
 
 _DEDUP_CONFIDENCE_THRESHOLD = 0.5
+# Below this many items a failed batch is kept whole instead of split again.
+_DEDUP_MIN_BATCH = 10
+# More than this fraction dropped from a batch of _DEDUP_MIN_BATCH+ items is
+# treated as a bad response, not a real result.
+_DEDUP_MAX_DROP_FRACTION = 0.5
+_DEDUP_MIN_NUM_CTX = 8192
+_DEDUP_MAX_NUM_CTX = 65536
+# Ollama silently trims prompts that overflow num_ctx; a prompt filling this
+# much of the window is assumed trimmed.
+_DEDUP_TRUNCATION_FRACTION = 0.9
+
+
+class _DedupFailed(Exception):
+    """A dedup batch produced no trustworthy result; caller may split it."""
+
+
+def _dedup_num_ctx(prompt: str) -> int:
+    """Context window for a dedup prompt: 2x a conservative (3 chars/token)
+    estimate, leaving room for the reply, clamped and rounded to 1K."""
+    want = 2 * len(prompt) // 3
+    want = -(-want // 1024) * 1024
+    return max(_DEDUP_MIN_NUM_CTX, min(_DEDUP_MAX_NUM_CTX, want))
 
 
 def _dedup_batch(batch: list[tuple[int, dict]], model: str) -> set[int]:
-    """Send one batch to LLM. Returns original indices to DROP."""
+    """Send one batch to LLM. Returns original indices to DROP.
+
+    The model lists groups of duplicates and which member of each to keep;
+    anything it leaves out is kept, so an incomplete reply errs toward
+    keeping items. Raises _DedupFailed when the reply can't be trusted
+    (server error, truncation, unparseable or implausible output).
+    """
     if len(batch) <= 1:
         return set()
 
     payload = [{"id": str(orig_i), "title": item["title"]} for orig_i, item in batch]
     prompt = (
         "You are a news deduplication filter. Given a list of article titles, "
-        "identify and remove duplicates — articles covering the same story, product release, "
+        "group duplicates — articles covering the same story, product release, "
         "or announcement, even if phrased differently or from different sources. "
-        "A shared product name + version (e.g. 'Gemma 4 12B') means duplicate.\n\n"
-        "Return a JSON object with key 'keep': a list of objects for each UNIQUE article to keep. "
-        "Each object: {\"id\": \"<original id>\", \"confidence\": <0.0-1.0>} "
-        "where confidence is how certain you are this item is unique. "
-        "When duplicates exist, keep the one with the most informative title.\n\n"
+        "A shared product name + version (e.g. 'Gemma 4 12B') means duplicate. "
+        "Identical or near-identical titles are always duplicates.\n\n"
+        "Return a JSON object with key 'groups': one object per story that appears "
+        "more than once. Each object: {\"ids\": [<every id covering that story>], "
+        "\"keep\": \"<id with the most informative title>\", \"confidence\": <0.0-1.0>} "
+        "where confidence is how certain you are they cover the same story. "
+        "List every member of each group. Articles that appear only once must not "
+        "be listed. If there are no duplicates, return {\"groups\": []}.\n\n"
         f"Articles:\n{json.dumps(payload, indent=2)}\n\n"
         "Response (JSON only):"
     )
 
-    raw = _chat(prompt, model, json_mode=True)
+    num_ctx = _dedup_num_ctx(prompt)
+    try:
+        result = _chat_meta(prompt, model, json_mode=True, num_ctx=num_ctx)
+    except (ollama.ResponseError, subprocess.CalledProcessError) as exc:
+        raise _DedupFailed(f"{exc.__class__.__name__}: {exc}") from exc
+
+    if result.done_reason == "length":
+        raise _DedupFailed("reply truncated (done_reason=length)")
+    if result.prompt_eval_count is not None and result.prompt_eval_count >= _DEDUP_TRUNCATION_FRACTION * num_ctx:
+        raise _DedupFailed(f"prompt likely truncated ({result.prompt_eval_count} tokens, num_ctx={num_ctx})")
 
     try:
-        keep_list = _parse_json(raw).get("keep", [])
-    except (json.JSONDecodeError, AttributeError):
-        print(f"[warn] _dedup_batch() failed to parse JSON: {raw!r}", file=sys.stderr)
-        return set()
+        parsed = _parse_json(result.text)
+    except (json.JSONDecodeError, ValueError) as exc:
+        raise _DedupFailed(f"unparseable JSON: {result.text[:200]!r}") from exc
+    groups = parsed.get("groups") if isinstance(parsed, dict) else None
+    if not isinstance(groups, list):
+        raise _DedupFailed(f"no 'groups' list in reply: {result.text[:200]!r}")
 
-    valid_ids = {str(orig_i) for orig_i, _ in batch}
-    kept_ids: set[str] = set()
-    for entry in keep_list:
-        if not isinstance(entry, dict):
+    valid_ids = {str(orig_i): orig_i for orig_i, _ in batch}
+    accepted: list[tuple[int, set[int]]] = []
+    for group in groups:
+        if not isinstance(group, dict) or not isinstance(group.get("ids"), list):
             continue
-        item_id = str(entry.get("id", ""))
-        confidence = float(entry.get("confidence", 1.0))
-        if item_id in valid_ids and confidence >= _DEDUP_CONFIDENCE_THRESHOLD:
-            kept_ids.add(item_id)
+        try:
+            confidence = float(group.get("confidence", 1.0))
+        except (TypeError, ValueError):
+            continue
+        members = {valid_ids[str(i)] for i in group["ids"] if str(i) in valid_ids}
+        keep = valid_ids.get(str(group.get("keep", "")))
+        if keep is None or keep not in members or len(members) < 2:
+            continue
+        if confidence < _DEDUP_CONFIDENCE_THRESHOLD:
+            continue
+        accepted.append((keep, members))
 
-    # If LLM returned nothing valid, keep everything (safe fallback)
-    if not kept_ids:
-        print(f"[warn] _dedup_batch() returned no valid ids — keeping all", file=sys.stderr)
-        return set()
+    # An item kept by any group survives, even if another group lists it as
+    # a duplicate — so overlapping groups can't remove a whole story.
+    kept = {keep for keep, _ in accepted}
+    dropped = {i for _, members in accepted for i in members} - kept
 
-    return {orig_i for orig_i, _ in batch if str(orig_i) not in kept_ids}
+    if len(batch) >= _DEDUP_MIN_BATCH and len(dropped) > _DEDUP_MAX_DROP_FRACTION * len(batch):
+        raise _DedupFailed(f"dropped {len(dropped)}/{len(batch)} items — implausible")
+
+    return dropped
+
+
+def _dedup_with_fallback(batch: list[tuple[int, dict]], model: str) -> set[int]:
+    """Dedup a batch, splitting it in half on failure. Duplicates that land
+    in different halves are missed, but that beats keeping everything."""
+    try:
+        return _dedup_batch(batch, model)
+    except _DedupFailed as exc:
+        if len(batch) < 2 * _DEDUP_MIN_BATCH:
+            print(f"[warn] [dedup] {len(batch)} items failed ({exc}) — keeping all", file=sys.stderr)
+            return set()
+        mid = len(batch) // 2
+        print(f"[dedup] {len(batch)} items failed ({exc}) → splitting {mid}/{len(batch) - mid}", file=sys.stderr)
+        return _dedup_with_fallback(batch[:mid], model) | _dedup_with_fallback(batch[mid:], model)
 
 
 def deduplicate(items: list[dict], model: str, batch_size: int | None = 0) -> list[dict]:
@@ -395,8 +482,7 @@ def deduplicate(items: list[dict], model: str, batch_size: int | None = 0) -> li
     llm_drop: set[int] = set()
     for start in range(0, len(surviving), step):
         batch = surviving[start:start + step]
-        dropped = _dedup_batch(batch, model)
-        llm_drop |= dropped
+        llm_drop |= _dedup_with_fallback(batch, model)
 
     if llm_drop:
         print(f"[dedup] LLM pass removed {len(llm_drop)} items", file=sys.stderr)

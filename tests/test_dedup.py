@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import json
+
+import httpx
+import ollama
 import pytest
 
 from newsradar import llm
@@ -85,3 +89,159 @@ def test_topic_can_override_batch_size(tmp_path, monkeypatch):
         env_file=tmp_path / "none.env",
     )
     assert config.topic("t").models.dedup_batch_size == 10
+
+
+# --- Single-batch parsing (groups format) ---------------------------------
+
+
+def _batch(n: int) -> list[tuple[int, dict]]:
+    return list(enumerate(_items(n)))
+
+
+@pytest.fixture
+def chat(monkeypatch):
+    """Script _chat_meta responses; records (batch ids, num_ctx) per call."""
+    calls: list[dict] = []
+    responses: list = []
+
+    def fake(prompt, model, json_mode=False, think=False, num_ctx=None, _retries=3):
+        ids = [p["id"] for p in json.loads(prompt.split("Articles:\n", 1)[1].split("\n\nResponse", 1)[0])]
+        calls.append({"ids": ids, "num_ctx": num_ctx})
+        r = responses.pop(0) if responses else llm.ChatResult('{"groups": []}')
+        if isinstance(r, Exception):
+            raise r
+        return r(ids) if callable(r) else r
+
+    monkeypatch.setattr(llm, "_chat_meta", fake)
+    return calls, responses
+
+
+def _groups(*groups, confidence=0.9) -> llm.ChatResult:
+    """Each group is (keep, *duplicates)."""
+    return llm.ChatResult(json.dumps({"groups": [
+        {"ids": [str(i) for i in g], "keep": str(g[0]), "confidence": confidence} for g in groups
+    ]}))
+
+
+def test_batch_drops_all_but_keep(chat):
+    _, responses = chat
+    responses.append(_groups((0, 1, 4), (2, 3)))
+    assert llm._dedup_batch(_batch(5), "m") == {1, 3, 4}
+
+
+def test_batch_omitted_ids_are_kept(chat):
+    _, responses = chat
+    responses.append(llm.ChatResult('{"groups": []}'))
+    assert llm._dedup_batch(_batch(5), "m") == set()
+
+
+def test_batch_ignores_low_confidence(chat):
+    _, responses = chat
+    responses.append(_groups((0, 1), confidence=0.2))
+    assert llm._dedup_batch(_batch(5), "m") == set()
+
+
+def test_batch_ignores_unknown_ids(chat):
+    _, responses = chat
+    responses.append(_groups((0, 99, 1), (98, 2), (3,)))
+    assert llm._dedup_batch(_batch(5), "m") == {1}
+
+
+def test_batch_keep_outside_group_is_ignored(chat):
+    _, responses = chat
+    responses.append(llm.ChatResult('{"groups": [{"ids": ["1", "2"], "keep": "0"}]}'))
+    assert llm._dedup_batch(_batch(5), "m") == set()
+
+
+def test_batch_overlapping_groups_never_drop_a_keep(chat):
+    _, responses = chat
+    responses.append(_groups((0, 1), (1, 0)))
+    assert llm._dedup_batch(_batch(5), "m") == set()
+
+
+@pytest.mark.parametrize("result", [
+    llm.ChatResult("not json"),
+    llm.ChatResult('["drop"]'),
+    llm.ChatResult('{"drop": []}'),
+    llm.ChatResult('{"groups": []}', done_reason="length"),
+])
+def test_batch_bad_response_raises(chat, result):
+    _, responses = chat
+    responses.append(result)
+    with pytest.raises(llm._DedupFailed):
+        llm._dedup_batch(_batch(5), "m")
+
+
+def test_batch_prompt_near_num_ctx_raises(chat):
+    calls, responses = chat
+    responses.append(lambda ids: llm.ChatResult('{"groups": []}', prompt_eval_count=calls[-1]["num_ctx"]))
+    with pytest.raises(llm._DedupFailed, match="truncated"):
+        llm._dedup_batch(_batch(5), "m")
+
+
+def test_batch_server_error_raises(chat):
+    _, responses = chat
+    responses.append(ollama.ResponseError("context too long", 400))
+    with pytest.raises(llm._DedupFailed):
+        llm._dedup_batch(_batch(5), "m")
+
+
+def test_batch_connection_error_propagates(chat):
+    _, responses = chat
+    responses.append(httpx.ConnectError("down"))
+    with pytest.raises(httpx.ConnectError):
+        llm._dedup_batch(_batch(5), "m")
+
+
+def test_batch_too_many_drops_raises(chat):
+    _, responses = chat
+    responses.append(_groups(tuple(range(8))))
+    with pytest.raises(llm._DedupFailed, match="dropped"):
+        llm._dedup_batch(_batch(12), "m")
+
+
+def test_batch_small_batch_may_drop_most(chat):
+    _, responses = chat
+    responses.append(_groups((0, 1, 2)))
+    assert llm._dedup_batch(_batch(3), "m") == {1, 2}
+
+
+def test_batch_num_ctx_scales_and_clamps(chat):
+    calls, _ = chat
+    llm._dedup_batch(_batch(5), "m")
+    llm._dedup_batch(_batch(400), "m")
+    llm._dedup_batch(_batch(5000), "m")
+    small, mid, huge = (c["num_ctx"] for c in calls)
+    assert small == llm._DEDUP_MIN_NUM_CTX
+    assert small < mid < huge == llm._DEDUP_MAX_NUM_CTX
+
+
+# --- Split-in-half fallback ---------------------------------------------------
+
+
+def test_failure_splits_in_half(chat):
+    calls, responses = chat
+    responses.append(ollama.ResponseError("too big", 400))
+    responses.append(_groups((0, 1)))
+    responses.append(_groups((25, 30)))
+    out = llm.deduplicate(_items(40), "m")
+    assert [len(c["ids"]) for c in calls] == [40, 20, 20]
+    kept = {i["title"] for i in out}
+    assert {f"Story {i}" for i in range(40)} - kept == {"Story 1", "Story 30"}
+
+
+def test_split_recurses(chat):
+    calls, responses = chat
+    responses.append(llm.ChatResult("", done_reason="length"))
+    responses.append(llm.ChatResult("", done_reason="length"))
+    out = llm.deduplicate(_items(80), "m")
+    assert [len(c["ids"]) for c in calls] == [80, 40, 20, 20, 40]
+    assert len(out) == 80
+
+
+def test_leaf_failure_keeps_all(chat):
+    calls, responses = chat
+    responses.extend([llm.ChatResult("not json")] * 3)
+    out = llm.deduplicate(_items(25), "m")
+    assert [len(c["ids"]) for c in calls] == [25, 12, 13]
+    assert len(out) == 25
