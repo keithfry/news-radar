@@ -38,6 +38,34 @@ def test_heuristic_ad_is_recorded(monkeypatch):
                         "source": "X", "reason": "advertisement"}]
 
 
+def _reasons(item: dict) -> list[str]:
+    removed: list[dict] = []
+    cli._process_one(1, 1, item, "rss", _TOPIC, _config, removed)
+    return [r["reason"] for r in removed]
+
+
+def test_ad_phrase_in_page_chrome_is_not_an_ad(monkeypatch):
+    # TechCrunch's sidebar promo ends up in every fetched article body.
+    _no_models(monkeypatch)
+    item = {"title": "Meta launches an open-weight model that runs on Macs",
+            "body": "Meta released the model today. Last day to save Oct. 16 Register now Most Popular"}
+    assert _reasons(item) == ["off-topic"]
+
+
+def test_dollar_amounts_in_body_are_not_an_ad(monkeypatch):
+    _no_models(monkeypatch)
+    item = {"title": "Acme tells investors quarterly revenue is up nearly 50%",
+            "body": "Revenue reached $16.8bn, up from $11bn, with $4bn in new bookings."}
+    assert _reasons(item) == ["off-topic"]
+
+
+def test_arxiv_items_skip_the_heuristic_ad_check(monkeypatch):
+    _no_models(monkeypatch)
+    item = {"title": "Planning under a limited time budget", "source": "arXiv - cs.LG",
+            "summary": "We bound regret by $2$, $5$ and $20$ rounds."}
+    assert _reasons(item) == ["off-topic"]
+
+
 def test_ad_gate_is_recorded(monkeypatch):
     _no_models(monkeypatch)
     monkeypatch.setattr(cli, "classify_ad", lambda *a: (True, "sponsored"))

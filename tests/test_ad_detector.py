@@ -75,16 +75,13 @@ def test_heuristic_detector_has_no_false_positives():
     conservative fast-path; the LLM gate catches the subtler cases)."""
     examples = _load_examples()
     y_true = [e["is_ad"] for e in examples]
-    y_pred = [_is_advertisement(e["title"], e["summary"]) for e in examples]
+    y_pred = [_is_advertisement(e["title"]) for e in examples]
     metrics = _metrics(y_true, y_pred)
     assert metrics["fp"] == 0, f"heuristic flagged a non-ad example as an ad: fp={metrics['fp']}"
 
 
-def test_heuristic_detector_catches_obvious_price_spam():
-    assert _is_advertisement(
-        "Huge Sale",
-        "Everything on sale: $5.99, $10.00, $15.50 — shop now while supplies last!",
-    )
+def test_heuristic_detector_catches_ad_phrase_in_title():
+    assert _is_advertisement("Shop now: 40% off GPUs with promo code AI40")
 
 
 @pytest.mark.skipif(

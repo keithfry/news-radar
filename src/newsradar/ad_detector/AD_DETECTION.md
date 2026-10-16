@@ -4,7 +4,7 @@
 
 ```
 item received
-  → _is_advertisement()     heuristic (price patterns, phrase list) — zero LLM cost
+  → _is_advertisement()     heuristic (ad phrase in the title) — zero LLM cost
   → classify_ad()           LLM gate (ad-detector model) — catches contextual ads
   → classify_ai()           relevance check (only for non-keyword items)
   → summarize()             only runs if item passed both gates
@@ -19,7 +19,7 @@ model without a `SYSTEM` prompt (such as base `qwen3.5:9b`) gets the full
 instructions inline. Sending both used to double prompt time and overflow the
 model's 4096-token context on long items.
 
-arXiv items skip the LLM gate. Each verdict is remembered for the run, so emails
+arXiv items skip both checks. Each verdict is remembered for the run, so emails
 and linked articles are checked once, not once per topic.
 
 ## Ad Categories the Gate Catches

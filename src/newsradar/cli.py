@@ -77,9 +77,6 @@ def log(msg: str) -> None:
 # Single-item processor — runs in a thread pool worker
 # ---------------------------------------------------------------------------
 
-import re as _re
-
-_PRICE_PATTERN = _re.compile(r"\$\d+(\.\d{2})?")
 _AD_PHRASES = {
     "shop now", "buy now", "add to cart", "free shipping", "order now",
     "gift idea", "gift guide", "on sale", "discount code",
@@ -98,13 +95,16 @@ _WEBINAR_PHRASES = {
 }
 
 
-def _is_advertisement(title: str, text: str) -> bool:
-    combined = (title + " " + text).lower()
-    if len(_PRICE_PATTERN.findall(combined)) >= 3:
-        return True
-    if any(phrase in combined for phrase in _AD_PHRASES):
-        return True
-    return False
+def _is_advertisement(title: str) -> bool:
+    """Flag a title that contains a stock ad phrase.
+
+    Only the title is checked. Fetched article bodies include page chrome,
+    such as a site's event promo with "register now", and normal news quotes
+    dollar figures, so body text misfired on real articles. The LLM ad gate
+    reads the body instead.
+    """
+    lowered = title.lower()
+    return any(phrase in lowered for phrase in _AD_PHRASES)
 
 
 def _is_webinar_summary(summary: str) -> bool:
@@ -146,13 +146,15 @@ def _process_one(
         return None
     log(f"  [{idx}/{total}] {label}: {title[:70]}")
 
-    if _is_advertisement(title, existing_text):
+    # arXiv papers are never ads, so they skip both ad checks.
+    arxiv = is_arxiv(item.get("source", ""))
+
+    if not arxiv and _is_advertisement(title):
         log(f"    [{idx}] → skip (advertisement)")
         removed.append(removal_record(item, "advertisement"))
         return None
 
-    # arXiv papers are never ads, so they skip the LLM ad gate.
-    if models.ad_gate_enabled and not is_arxiv(item.get("source", "")):
+    if models.ad_gate_enabled and not arxiv:
         is_ad, ad_reason = _classify_ad_once(title, existing_text[:1000], models.ad_detector_model)
         if is_ad:
             log(f"    [{idx}] → skip (ad gate: {ad_reason})")
