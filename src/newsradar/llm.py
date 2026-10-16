@@ -455,8 +455,23 @@ def _dedup_with_fallback(batch: list[tuple[int, dict]], model: str) -> set[int]:
         return _dedup_with_fallback(batch[:mid], model) | _dedup_with_fallback(batch[mid:], model)
 
 
+def _exact_title_duplicates(items: list[dict]) -> set[int]:
+    """Indices of items whose title matches another's, ignoring case and
+    whitespace. Of each match, the item with the longest summary is kept
+    (the first one on a tie)."""
+    keys = [" ".join(item.get("title", "").split()).casefold() for item in items]
+    best: dict[str, int] = {}
+    for i, key in enumerate(keys):
+        if not key:
+            continue
+        if key not in best or len(items[i].get("summary", "")) > len(items[best[key]].get("summary", "")):
+            best[key] = i
+    kept = set(best.values())
+    return {i for i, key in enumerate(keys) if key and i not in kept}
+
+
 def deduplicate(items: list[dict], model: str, batch_size: int | None = 0) -> list[dict]:
-    """Remove near-duplicate items using keyword pre-pass + batched LLM filter.
+    """Remove duplicate items: exact-title pre-pass, then batched LLM filter.
 
     batch_size is items per LLM call; 0 or None sends all items in one call.
     """
@@ -471,7 +486,9 @@ def deduplicate(items: list[dict], model: str, batch_size: int | None = 0) -> li
     #     pre_drop.update(i for i in group if i != best)
     # if pre_drop:
     #     print(f"[dedup] keyword pre-pass removed {len(pre_drop)} items", file=sys.stderr)
-    pre_drop: set[int] = set()
+    pre_drop = _exact_title_duplicates(items)
+    if pre_drop:
+        print(f"[dedup] exact-title pre-pass removed {len(pre_drop)} items", file=sys.stderr)
 
     surviving = [(orig_i, item) for orig_i, item in enumerate(items) if orig_i not in pre_drop]
     if len(surviving) <= 1:

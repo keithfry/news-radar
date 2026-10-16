@@ -245,3 +245,30 @@ def test_leaf_failure_keeps_all(chat):
     out = llm.deduplicate(_items(25), "m")
     assert [len(c["ids"]) for c in calls] == [25, 12, 13]
     assert len(out) == 25
+
+
+# --- Exact-title pre-pass -------------------------------------------------------
+
+
+def test_exact_titles_removed_before_llm(batch_sizes):
+    items = [
+        {"title": "Best OCR for Agents", "summary": "short"},
+        {"title": "Other story"},
+        {"title": "  best ocr   FOR agents ", "summary": "much longer summary"},
+    ]
+    out = llm.deduplicate(items, "m")
+    assert [i["title"] for i in out] == ["Other story", "  best ocr   FOR agents "]
+    assert batch_sizes == [2]
+
+
+def test_exact_title_tie_keeps_first(batch_sizes):
+    items = [{"title": "Same", "summary": "a"}, {"title": "SAME", "summary": "b"}]
+    out = llm.deduplicate(items, "m")
+    assert out == [items[0]]
+    assert batch_sizes == []  # one survivor left — no LLM call
+
+
+def test_distinct_titles_untouched(batch_sizes):
+    out = llm.deduplicate(_items(5), "m")
+    assert len(out) == 5
+    assert batch_sizes == [5]
