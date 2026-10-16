@@ -18,8 +18,10 @@ def _items(n: int) -> list[dict]:
 
 @pytest.fixture
 def batch_sizes(monkeypatch):
-    """Replace the LLM call with a recorder; drops nothing."""
+    """Replace the LLM call with a recorder; drops nothing. Validation
+    retries are off so recorded sizes show batching only."""
     sizes: list[int] = []
+    monkeypatch.setattr(llm, "_DEDUP_RETRY_MIN_BATCH", 10**9)
 
     def fake_batch(batch, model):
         sizes.append(len(batch))
@@ -235,7 +237,8 @@ def test_split_recurses(chat):
     responses.append(llm.ChatResult("", done_reason="length"))
     responses.append(llm.ChatResult("", done_reason="length"))
     out = llm.deduplicate(_items(80), "m")
-    assert [len(c["ids"]) for c in calls] == [80, 40, 20, 20, 40]
+    # The last 40 comes back empty, so it gets a validation retry.
+    assert [len(c["ids"]) for c in calls] == [80, 40, 20, 20, 40, 40]
     assert len(out) == 80
 
 
@@ -272,3 +275,40 @@ def test_distinct_titles_untouched(batch_sizes):
     out = llm.deduplicate(_items(5), "m")
     assert len(out) == 5
     assert batch_sizes == [5]
+
+
+# --- Validation retry on empty result -------------------------------------------
+
+
+def test_empty_result_on_large_batch_retries_once(chat, capsys):
+    calls, responses = chat
+    responses.append(llm.ChatResult('{"groups": []}'))
+    responses.append(_groups((0, 1)))
+    out = llm.deduplicate(_items(40), "m")
+    assert [len(c["ids"]) for c in calls] == [40, 40]
+    assert len(out) == 39
+    err = capsys.readouterr().err
+    assert "validation retry" in err
+    assert "retry found 1 duplicate" in err
+
+
+def test_empty_result_confirmed_by_retry(chat, capsys):
+    calls, _ = chat
+    out = llm.deduplicate(_items(40), "m")
+    assert [len(c["ids"]) for c in calls] == [40, 40]
+    assert len(out) == 40
+    assert "retry confirmed no duplicates" in capsys.readouterr().err
+
+
+def test_empty_result_on_small_batch_not_retried(chat):
+    calls, _ = chat
+    llm.deduplicate(_items(39), "m")
+    assert len(calls) == 1
+
+
+def test_retry_failure_falls_back_to_split(chat):
+    calls, responses = chat
+    responses.append(llm.ChatResult('{"groups": []}'))
+    responses.append(llm.ChatResult("", done_reason="length"))
+    llm.deduplicate(_items(40), "m")
+    assert [len(c["ids"]) for c in calls] == [40, 40, 20, 20]

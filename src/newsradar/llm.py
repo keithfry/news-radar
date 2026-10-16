@@ -347,6 +347,9 @@ _DEDUP_MIN_BATCH = 10
 # More than this fraction dropped from a batch of _DEDUP_MIN_BATCH+ items is
 # treated as a bad response, not a real result.
 _DEDUP_MAX_DROP_FRACTION = 0.5
+# An empty result for a batch this big is suspicious (the model sometimes
+# answers "no duplicates" on a full day), so it is retried once to confirm.
+_DEDUP_RETRY_MIN_BATCH = 40
 _DEDUP_MIN_NUM_CTX = 8192
 _DEDUP_MAX_NUM_CTX = 65536
 # Ollama silently trims prompts that overflow num_ctx; a prompt filling this
@@ -445,7 +448,17 @@ def _dedup_with_fallback(batch: list[tuple[int, dict]], model: str) -> set[int]:
     """Dedup a batch, splitting it in half on failure. Duplicates that land
     in different halves are missed, but that beats keeping everything."""
     try:
-        return _dedup_batch(batch, model)
+        dropped = _dedup_batch(batch, model)
+        if not dropped and len(batch) >= _DEDUP_RETRY_MIN_BATCH:
+            print(f"[dedup] validation retry: {len(batch)} items came back with no duplicates "
+                  "— asking again to confirm", file=sys.stderr)
+            dropped = _dedup_batch(batch, model)
+            if dropped:
+                print(f"[dedup] validation retry found {len(dropped)} duplicate(s) "
+                      "— first answer was wrong, using retry", file=sys.stderr)
+            else:
+                print("[dedup] validation retry confirmed no duplicates", file=sys.stderr)
+        return dropped
     except _DedupFailed as exc:
         if len(batch) < 2 * _DEDUP_MIN_BATCH:
             print(f"[warn] [dedup] {len(batch)} items failed ({exc}) — keeping all", file=sys.stderr)
