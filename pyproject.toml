@@ -7,6 +7,7 @@ license = { text = "MIT" }
 requires-python = ">=3.13"
 dependencies = [
     "feedparser",
+    "requests",
     "ollama",
     "google-auth-oauthlib",
     "google-auth-httplib2",

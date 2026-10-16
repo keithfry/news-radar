@@ -7,9 +7,12 @@ from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
 import feedparser
+import requests
 
 from .config import Config
 from .topics import Topic
+
+_FEED_TIMEOUT = 30
 
 
 def load_feeds(csv_path: Path) -> list[dict]:
@@ -39,12 +42,25 @@ def parse_entry_date(entry) -> datetime | None:
     return None
 
 
+def _feed_error(source: str, feed_url: str, error: str) -> dict:
+    print(f"[warn] failed to fetch {feed_url}: {error}", file=sys.stderr)
+    return {"source": source, "feed_url": feed_url, "error": error}
+
+
 def fetch_feed(source: str, feed_url: str, cutoff: datetime, as_of: datetime | None = None) -> dict:
+    # Download with requests rather than letting feedparser fetch: requests
+    # verifies TLS against certifi (the macOS system bundle lacks some roots)
+    # and raises on HTTP errors, which feedparser silently returns as an
+    # empty feed.
     try:
-        parsed = feedparser.parse(feed_url)
-    except Exception as e:
-        print(f"[warn] failed to fetch {feed_url}: {e}", file=sys.stderr)
-        return {"source": source, "feed_url": feed_url, "error": str(e)}
+        resp = requests.get(feed_url, headers={"User-Agent": feedparser.USER_AGENT}, timeout=_FEED_TIMEOUT)
+        resp.raise_for_status()
+    except requests.RequestException as e:
+        return _feed_error(source, feed_url, str(e))
+
+    parsed = feedparser.parse(resp.content, response_headers={"content-type": resp.headers.get("content-type", "")})
+    if parsed.bozo and not parsed.entries:
+        return _feed_error(source, feed_url, f"not a feed: {parsed.bozo_exception}")
 
     items = []
     for entry in parsed.entries:
