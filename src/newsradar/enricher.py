@@ -93,9 +93,14 @@ def enrich(
     """
     from .llm import rank_items, generate_audio_script, generate_intro_script, generate_episode_tagline, generate_outro_script, unload_all_models
 
-    # Separate podcast candidates (emails + articles) from papers
-    podcast_candidates = [i for i in all_items if not i.get("_is_arxiv")]
-    papers = [i for i in all_items if i.get("_is_arxiv")]
+    # Papers are podcast candidates only in a papers-only topic. Elsewhere they
+    # stay on the page without audio.
+    if topic.papers == "only":
+        podcast_candidates = list(all_items)
+        papers = []
+    else:
+        podcast_candidates = [i for i in all_items if not i.get("_is_arxiv")]
+        papers = [i for i in all_items if i.get("_is_arxiv")]
 
     log(f"  Enriching {len(podcast_candidates)} podcast candidates + {len(papers)} papers (excluded from audio)")
 
@@ -107,6 +112,12 @@ def enrich(
     # Rank podcast candidates
     log(f"  Ranking items by relevance (model: {rank_model})...")
     ranked = rank_items(podcast_candidates, model=rank_model)
+
+    # Past the cap, ranked items stay on the page but get no audio.
+    unnarrated: list[dict] = []
+    if topic.podcast_max_items is not None and len(ranked) > topic.podcast_max_items:
+        ranked, unnarrated = ranked[: topic.podcast_max_items], ranked[topic.podcast_max_items :]
+        log(f"  Narrating the top {len(ranked)} of {len(ranked) + len(unnarrated)} ranked items")
 
     # Generate audio script per item in parallel (rank order preserved via futures dict)
     log(f"  Generating {len(ranked)} audio scripts ({llm_workers} workers, model: {summarize_model})...")
@@ -160,12 +171,12 @@ def enrich(
     for i, item in enumerate(ranked):
         item["chapter_start_seconds"] = chapter_times[i + 1] if i + 1 < len(chapter_times) else chapter_times[-1]
 
-    # Add papers back (not in podcast, no audio fields)
-    for paper in papers:
-        paper["include_in_podcast"] = False
-        paper["chapter_start_seconds"] = None
+    # Add back the items without audio: ranked items past the cap, then papers
+    for item in unnarrated + papers:
+        item["include_in_podcast"] = False
+        item["chapter_start_seconds"] = None
 
-    all_enriched = ranked + papers
+    all_enriched = ranked + unnarrated + papers
 
     data = _build_enriched_dict(date, intro_script, episode_tagline, outro_script, all_enriched)
     write_enriched_json(data, output_path)

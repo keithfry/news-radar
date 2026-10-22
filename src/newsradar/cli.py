@@ -181,6 +181,12 @@ def _process_one(
 
     log(f"    [{idx}] → tagging...")
     tags = tag(title, summary_text, models.summarize_model)
+
+    tags, excluded = _apply_exclusions(title, summary_text, tags, topic, config)
+    if excluded:
+        log(f"    [{idx}] → skip (belongs in {excluded})")
+        removed.append(removal_record(item, excluded))
+        return None
     log(f"    [{idx}] → done  tags={tags}")
 
     return {
@@ -193,6 +199,38 @@ def _process_one(
         "_source_type": source_type,
         "_is_arxiv": is_arxiv(item.get("source", "")),
     }
+
+
+def _apply_exclusions(
+    title: str, summary: str, tags: list[str], topic: Topic, config: Config,
+) -> tuple[list[str], str | None]:
+    """Check an item against each topic this topic excludes.
+
+    The tagger's tag for an excluded topic (e.g. "robotics") is only a hint. The
+    excluded topic's own classifier makes the call. Returns (tags, excluded_name):
+    excluded_name is set when the item belongs to that topic instead. A kept item
+    loses the tag, so this topic's page never shows that category.
+    """
+    for name in topic.exclude_topics:
+        if name not in tags:
+            continue
+        other = config.topic(name)
+        if classify_topic(title, summary[:500], effective_models(config, other).classify_model, other):
+            return tags, name
+        tags = [t for t in tags if t != name]
+    return tags, None
+
+
+def _filter_for_topic(items: list[dict], topic: Topic) -> list[dict]:
+    """Apply the topic's papers mode before any LLM work.
+
+    Items dropped here belong to another topic, so they get no removal record.
+    """
+    if topic.papers == "exclude":
+        return [i for i in items if not is_arxiv(i.get("source", ""))]
+    if topic.papers == "only":
+        return [i for i in items if is_arxiv(i.get("source", ""))]
+    return items
 
 
 def _process_items(
@@ -301,8 +339,8 @@ def _run_topic(
     email_items: list[dict] | None = None,
     linked_articles: list[dict] | None = None,
 ) -> list[Path]:
-    email_items = email_items or []
-    linked_articles = linked_articles or []
+    email_items = _filter_for_topic(email_items or [], topic)
+    linked_articles = _filter_for_topic(linked_articles or [], topic)
     models = effective_models(config, topic)
 
     base_dir = config.output_root / topic.output_dir
@@ -420,6 +458,7 @@ def _run_topic(
     # --- Step 1: Fetch RSS feeds ---
     log(f"── Step 1: Fetching {topic.display_name} RSS feeds ──")
     rss_articles, rss_errors = fetch_all_feeds(config, topic, hours=args.hours, as_of=as_of_utc)
+    rss_articles = _filter_for_topic(rss_articles, topic)
     log(f"  {len(rss_articles)} articles fetched, {len(rss_errors)} feed errors")
     for e in rss_errors:
         log(f"  ERROR {e['source']}: {e['error']}")

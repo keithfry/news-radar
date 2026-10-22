@@ -204,11 +204,14 @@ def generate_html(
         if removed else
         f'    <span class="stat-pill">{removed_label}</span>\n'
     )
+    # A papers-only digest has no newsletters or articles, so skip those pills.
+    papers_only = bool(papers) and not newsletters and not articles
     stats = (
-        f'    <span class="stat-pill">📬 {len(newsletters)} Newsletter{"s" if len(newsletters) != 1 else ""}</span>\n'
-        f'    <span class="stat-pill">📰 {len(articles)} Article{"s" if len(articles) != 1 else ""}</span>\n'
-        f'    <span class="stat-pill">🔬 {len(papers)} Paper{"s" if len(papers) != 1 else ""}</span>\n'
-        f'    <span class="stat-pill">{"✅" if error_count == 0 else "⚠️"} {error_count} Feed Error{"s" if error_count != 1 else ""}</span>\n'
+        ("" if papers_only else
+         f'    <span class="stat-pill">📬 {len(newsletters)} Newsletter{"s" if len(newsletters) != 1 else ""}</span>\n'
+         f'    <span class="stat-pill">📰 {len(articles)} Article{"s" if len(articles) != 1 else ""}</span>\n')
+        + (f'    <span class="stat-pill">🔬 {len(papers)} Paper{"s" if len(papers) != 1 else ""}</span>\n' if papers else "")
+        + f'    <span class="stat-pill">{"✅" if error_count == 0 else "⚠️"} {error_count} Feed Error{"s" if error_count != 1 else ""}</span>\n'
         + removed_pill
     )
 

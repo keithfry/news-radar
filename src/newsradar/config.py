@@ -14,7 +14,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-from .topics import Topic
+from .topics import PAPERS_MODES, Topic
 
 DEFAULT_TOKEN_DIR = Path.home() / ".config" / "newsradar"
 GMAIL_SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"]
@@ -139,6 +139,19 @@ def _load_topic_file(topic_path: Path, base_models: ModelsConfig) -> Topic:
         if field_name in t:
             kwargs[field_name] = tuple(t[field_name])
 
+    papers = t.get("papers", "include")
+    if papers not in PAPERS_MODES:
+        raise ValueError(f"Topic {t['name']!r}: papers must be one of {PAPERS_MODES}, got {papers!r}")
+    kwargs["papers"] = papers
+
+    if "podcast_max_items" in t:
+        cap = t["podcast_max_items"]
+        if not isinstance(cap, int) or isinstance(cap, bool) or cap < 1:
+            raise ValueError(f"Topic {t['name']!r}: podcast_max_items must be a positive integer, got {cap!r}")
+        kwargs["podcast_max_items"] = cap
+
+    kwargs["exclude_topics"] = list(t.get("exclude_topics", []))
+
     models_raw = raw.get("models")
     if models_raw:
         overrides = {k: v for k, v in models_raw.items() if k in _MODELS_FIELDS}
@@ -227,6 +240,11 @@ def load_config(config_path: str | Path, env_file: str | Path | None = None) -> 
     for rel_path in topic_files:
         topic = _load_topic_file(_resolve_path(base, rel_path), models)
         topics[topic.name] = topic
+
+    for topic in topics.values():
+        unknown = [n for n in topic.exclude_topics if n not in topics or n == topic.name]
+        if unknown:
+            raise ValueError(f"Topic {topic.name!r}: exclude_topics names unknown topics {unknown}")
 
     publish_hook = raw.get("publish", {}).get("hook")
 
