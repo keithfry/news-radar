@@ -196,3 +196,17 @@ class TestPurgeEpisodes(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def test_purge_episodes_leaves_shared_stylesheet_at_output_root():
+    """FR-014: a site stylesheet beside the topic dirs survives retention."""
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        stylesheet = root / "radar.css"
+        stylesheet.write_text("body {}")
+        _write_episode(root / "AI" / "2026-01", "2026-01-01")
+
+        purge_episodes(root / "AI", "ai-radar", 30, datetime(2026, 6, 1, tzinfo=timezone.utc), log=lambda *a: None)
+
+        assert not (root / "AI" / "2026-01").exists()
+        assert stylesheet.exists()

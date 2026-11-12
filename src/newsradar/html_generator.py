@@ -5,7 +5,9 @@ The LLM produces summaries and tags; this module handles all HTML rendering.
 
 from datetime import datetime
 from html import escape
+from pathlib import PurePosixPath
 
+from .config import SiteConfig
 from .llm import removed_counts
 
 # Tag key → (CSS class, display label)
@@ -116,6 +118,47 @@ _CSS = """\
   .podcast-subscribe:hover { background: rgba(96,165,250,0.1); }"""
 
 
+def site_bar_html(home_url: str, home_label: str, crumbs: list[tuple[str, str | None]]) -> str:
+    """Bar linking back to the parent site, then a breadcrumb.
+
+    Each crumb is (label, href); href None marks the current page. Returns ""
+    when home_url is empty, so callers can pass the result straight through.
+    """
+    if not home_url:
+        return ""
+    items = "".join(
+        f'    <li><a href="{escape(href)}">{escape(label)}</a></li>\n'
+        if href is not None else
+        f'    <li aria-current="page">{escape(label)}</li>\n'
+        for label, href in crumbs
+    )
+    return (
+        '<nav class="site-bar" aria-label="Site">\n'
+        f'  <a class="site-bar-home" href="{escape(home_url)}">{escape(home_label)}</a>\n'
+        '  <ol class="site-bar-crumbs">\n'
+        f"{items}"
+        "  </ol>\n"
+        "</nav>"
+    )
+
+
+def digest_page_chrome(
+    site: SiteConfig, topic_output_dir: str, topic_label: str, date: datetime
+) -> tuple[str | None, str]:
+    """(stylesheet_href, site_bar) for a digest at output_root/<topic_output_dir>/YYYY-MM/.
+
+    Both are off (None, "") unless the [site] config opts in.
+    """
+    up = "../" * (len(PurePosixPath(topic_output_dir).parts) + 1)
+    href = f"{up}{site.stylesheet}" if site.stylesheet else None
+    crumbs = [
+        (site.section_label or site.title, up),
+        (topic_label, "../"),
+        (date.strftime("%B %-d, %Y"), None),
+    ]
+    return href, site_bar_html(site.home_url, site.home_label, crumbs)
+
+
 def _card(item: dict, extra_class: str = "") -> str:
     cls = f"card {extra_class}".strip()
     tag_keys = " ".join(t for t in item.get("tags", []) if t in TAG_META)
@@ -187,6 +230,8 @@ def generate_html(
     mp3_url: str | None = None,
     podcast_rss_url: str | None = None,
     og_image_url: str | None = None,
+    stylesheet_href: str | None = None,
+    site_bar: str = "",
 ) -> str:
     digest_title = f"{topic_label} Daily Digest"
 
@@ -222,6 +267,13 @@ def generate_html(
         key=lambda t: TAG_META[t][1],
     )
 
+    style_html = (
+        f'<link rel="stylesheet" href="{escape(stylesheet_href)}">'
+        if stylesheet_href else
+        f"<style>\n{_CSS}\n</style>"
+    )
+    bar_html = f"{site_bar}\n" if site_bar else ""
+
     parts: list[str] = []
     og_meta = ""
     if og_image_url:
@@ -243,12 +295,10 @@ def generate_html(
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>{digest_title} &mdash; {date_title}</title>
-{og_meta}<style>
-{_CSS}
-</style>
+{og_meta}{style_html}
 </head>
 <body>
-
+{bar_html}
 <div class="page-header">
   <div class="eyebrow">⚡ Daily Briefing</div>
   <h1>{digest_title}</h1>

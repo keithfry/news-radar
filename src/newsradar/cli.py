@@ -35,7 +35,7 @@ from .config import Config, effective_models, load_config
 from .email_fetcher import _get_credentials, fetch_emails
 from .enricher import enrich, write_enriched_json
 from .feed_fetcher import fetch_all_feeds, is_arxiv
-from .html_generator import generate_html
+from .html_generator import digest_page_chrome, generate_html
 from .llm import (
     classify_ad,
     classify_topic,
@@ -536,11 +536,15 @@ def _run_topic(
             _mp3_url = None if args.no_podcast else f"{_url_base}/{topic.output_dir}/{ym_dir}/{file_prefix}-{date_str}.mp3"
             _rss_url = None if args.no_podcast else f"{_url_base}/{topic.output_dir}/podcast.rss"
             _og_url = None if args.no_podcast else f"{_url_base}/{topic.output_dir}/{ym_dir}/{file_prefix}-{date_str}.og.jpg"
+            stylesheet_href, site_bar = digest_page_chrome(
+                config.site, topic.output_dir, topic.display_name, as_of,
+            )
             html = generate_html(
                 newsletters=newsletters, articles=articles,
                 papers=papers, errors=rss_errors, removed=removed, date=as_of,
                 topic_label=topic.display_name,
                 mp3_url=_mp3_url, podcast_rss_url=_rss_url, og_image_url=_og_url,
+                stylesheet_href=stylesheet_href, site_bar=site_bar,
             )
             html_result.append(html)
             log(f"  HTML generated ({len(html):,} chars)")

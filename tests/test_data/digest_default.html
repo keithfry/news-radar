@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Daily Digest &mdash; November 12, 2026</title>
+<meta property="og:title" content="AI Daily Digest — November 12, 2026"/>
+<meta property="og:description" content="AI news digest — November 12, 2026"/>
+<meta property="og:image" content="https://example.com/ai-radar-2026-11-12.og.jpg"/>
+<meta property="og:image:width" content="1200"/>
+<meta property="og:image:height" content="630"/>
+<meta property="og:type" content="website"/>
+<meta name="twitter:card" content="summary_large_image"/>
+<meta name="twitter:image" content="https://example.com/ai-radar-2026-11-12.og.jpg"/>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    background: #f4f6f9;
+    color: #1a1d23;
+    line-height: 1.6;
+  }
+  .page-header {
+    background: linear-gradient(135deg, #0f172a 0%, #1e293b 60%, #0f3460 100%);
+    color: white;
+    padding: 52px 24px 44px;
+    text-align: center;
+  }
+  .page-header .eyebrow { font-size: 11px; letter-spacing: 3.5px; text-transform: uppercase; color: #60a5fa; margin-bottom: 14px; font-weight: 600; }
+  .page-header h1 { font-size: 34px; font-weight: 800; letter-spacing: -0.5px; margin-bottom: 10px; }
+  .page-header .dateline { font-size: 15px; color: #94a3b8; }
+  .header-stats { display: flex; justify-content: center; gap: 20px; margin-top: 22px; flex-wrap: wrap; }
+  .stat-pill { background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); border-radius: 20px; padding: 5px 16px; font-size: 12px; color: #cbd5e1; font-weight: 500; }
+  .container { max-width: 880px; margin: 0 auto; padding: 44px 20px 64px; }
+  .section-header { display: flex; align-items: center; gap: 10px; margin: 52px 0 18px; padding-bottom: 12px; border-bottom: 2px solid #e2e8f0; }
+  .section-header .icon { font-size: 20px; }
+  .section-header h2 { font-size: 18px; font-weight: 700; color: #0f172a; letter-spacing: -0.2px; }
+  .section-header .badge { margin-left: auto; font-size: 11px; font-weight: 700; background: #f1f5f9; color: #64748b; border-radius: 12px; padding: 3px 11px; }
+  .subsection { font-size: 10px; font-weight: 800; letter-spacing: 2px; text-transform: uppercase; color: #94a3b8; margin: 28px 0 10px; }
+  .card { background: white; border-radius: 10px; padding: 20px 22px; margin-bottom: 12px; border: 1px solid #e8edf3; box-shadow: 0 1px 3px rgba(0,0,0,0.05); transition: box-shadow 0.15s ease; }
+  .card:hover { box-shadow: 0 4px 14px rgba(0,0,0,0.09); }
+  .card .via { font-size: 10.5px; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase; color: #3b82f6; margin-bottom: 6px; }
+  .card h3 { font-size: 15.5px; font-weight: 700; line-height: 1.4; margin-bottom: 9px; color: #0f172a; }
+  .card h3 a { color: inherit; text-decoration: none; }
+  .card h3 a:hover { color: #2563eb; text-decoration: underline; }
+  .card p { font-size: 14px; color: #475569; line-height: 1.65; }
+  .card.arxiv { border-left: 3px solid #8b5cf6; }
+  .card.arxiv .via { color: #8b5cf6; }
+  .card.robotics { border-left: 3px solid #10b981; }
+  .card.robotics .via { color: #10b981; }
+  .tags { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 10px; }
+  .tag { font-size: 10.5px; font-weight: 600; padding: 2px 9px; border-radius: 10px; }
+  .t-policy   { background:#fee2e2; color:#b91c1c; }
+  .t-model    { background:#dbeafe; color:#1d4ed8; }
+  .t-agents   { background:#dcfce7; color:#15803d; }
+  .t-safety   { background:#fef9c3; color:#a16207; }
+  .t-robotics { background:#ede9fe; color:#6d28d9; }
+  .t-voice    { background:#ffedd5; color:#c2410c; }
+  .t-health   { background:#cffafe; color:#0e7490; }
+  .t-research { background:#f1f5f9; color:#475569; }
+  .t-ethics   { background:#fce7f3; color:#be185d; }
+  .problem-feeds { border: 1px solid #fca5a5; background: #fff7f7; border-radius: 10px; padding: 20px 22px; margin-top: 40px; }
+  .problem-feeds h2 { font-size: 15px; font-weight: 700; color: #b91c1c; margin-bottom: 12px; }
+  .problem-feeds ul { list-style: none; }
+  .problem-feeds li { font-size: 13px; color: #64748b; margin-bottom: 8px; }
+  .problem-feeds li a { color: #2563eb; }
+  .problem-feeds .error-reason { color: #dc2626; font-style: italic; }
+  a.stat-pill { text-decoration: none; }
+  a.stat-pill:hover { background: rgba(255,255,255,0.14); }
+  .removed-items { border: 1px solid #e2e8f0; background: white; border-radius: 10px; padding: 20px 22px; margin-top: 24px; }
+  .removed-items > summary { font-size: 15px; font-weight: 700; color: #475569; cursor: pointer; }
+  .removed-items h3 { font-size: 12px; font-weight: 800; letter-spacing: 1.2px; text-transform: uppercase; color: #94a3b8; margin: 18px 0 8px; }
+  .removed-items ul { list-style: none; }
+  .removed-items li { font-size: 13px; color: #64748b; margin-bottom: 6px; }
+  .removed-items li a { color: #2563eb; }
+  footer { text-align: center; font-size: 12px; color: #94a3b8; padding: 28px 20px 40px; border-top: 1px solid #e2e8f0; margin-top: 16px; }
+  .filter-bar { background: white; border-bottom: 1px solid #e2e8f0; padding: 12px 20px; display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+  .filter-chip { font-size: 11px; font-weight: 700; padding: 4px 12px; border-radius: 12px; cursor: pointer; border: 2px solid transparent; transition: border-color 0.15s, opacity 0.15s; }
+  .filter-chip.active { border-color: currentColor; }
+  .filter-chip.dimmed { opacity: 0.4; }
+  .card.hidden { display: none; }
+  .subsection.hidden { display: none; }
+  .section-block.hidden { display: none; }
+  .podcast-player { margin-top: 22px; display: flex; align-items: center; justify-content: center; gap: 12px; flex-wrap: wrap; }
+  .podcast-player audio { max-width: 360px; width: 100%; height: 36px; border-radius: 18px; }
+  .podcast-subscribe { font-size: 11px; font-weight: 700; color: #60a5fa; text-decoration: none; letter-spacing: 0.5px; padding: 6px 16px; border: 1px solid rgba(96,165,250,0.4); border-radius: 14px; white-space: nowrap; transition: background 0.15s; }
+  .podcast-subscribe:hover { background: rgba(96,165,250,0.1); }
+</style>
+</head>
+<body>
+
+<div class="page-header">
+  <div class="eyebrow">⚡ Daily Briefing</div>
+  <h1>AI Daily Digest</h1>
+  <div class="dateline">Thursday, November 12, 2026 &mdash; 8:00 AM ET</div>
+  <div class="header-stats">
+    <span class="stat-pill">📬 1 Newsletter</span>
+    <span class="stat-pill">📰 2 Articles</span>
+    <span class="stat-pill">🔬 1 Paper</span>
+    <span class="stat-pill">⚠️ 1 Feed Error</span>
+    <a class="stat-pill" href="#removed-items">🗑 1 Removed</a>
+  </div>
+  <div class="podcast-player">
+    <audio controls preload="none" src="https://example.com/ai-radar-2026-11-12.mp3">Your browser does not support audio.</audio>
+  <a class="podcast-subscribe" href="https://example.com/podcast.rss">🎙 Subscribe</a>
+  </div>
+</div>
+
+<div class="filter-bar">
+  <button class="filter-chip t-agents" data-tag="agents">Agents</button>
+  <button class="filter-chip t-model" data-tag="model">Models</button>
+  <button class="filter-chip t-research" data-tag="research">Research</button>
+  <button class="filter-chip t-robotics" data-tag="robotics">Robotics</button>
+</div>
+
+<div class="container">
+  <div class="section-block">
+  <div class="section-header"><span class="icon">📬</span><h2>Email Newsletters</h2><span class="badge">1 item</span></div>
+
+  <div class="card" data-tags="agents">
+    <div class="via">The Batch</div>
+    <h3><a href="https://example.com/n1" target="_blank" rel="noopener">Weekly agents roundup</a></h3>
+    <p>Agents shipped.</p>
+    <div class="tags"><span class="tag t-agents">Agents</span></div>
+  </div>
+  </div>
+
+  <div class="section-block">
+  <div class="section-header"><span class="icon">📰</span><h2>Blog Posts &amp; Articles</h2><span class="badge">2 items</span></div>
+
+  <div class="subsection">Models &amp; Developer Tools</div>
+
+  <div class="card" data-tags="model">
+    <div class="via">Example Blog</div>
+    <h3><a href="https://example.com/a1" target="_blank" rel="noopener">New model release</a></h3>
+    <p>A model came out.</p>
+    <div class="tags"><span class="tag t-model">Models</span></div>
+  </div>
+
+  <div class="subsection">Robotics</div>
+
+  <div class="card robotics" data-tags="robotics">
+    <div class="via">Robot News</div>
+    <h3><a href="https://example.com/a2" target="_blank" rel="noopener">Humanoid demo</a></h3>
+    <p>A robot walked.</p>
+    <div class="tags"><span class="tag t-robotics">Robotics</span></div>
+  </div>
+  </div>
+
+  <div class="section-block">
+  <div class="section-header"><span class="icon">🔬</span><h2>Latest Research Papers</h2><span class="badge">1 paper · arXiv</span></div>
+
+  <div class="card arxiv" data-tags="research">
+    <div class="via">arXiv</div>
+    <h3><a href="https://arxiv.org/abs/0000.00000" target="_blank" rel="noopener">Scaling laws, again</a></h3>
+    <p>Bigger is better.</p>
+    <div class="tags"><span class="tag t-research">Research</span></div>
+  </div>
+  </div>
+
+  <div class="problem-feeds">
+    <h2>⚠️ Problem Feeds</h2>
+    <ul>
+      <li><strong>Dead Feed</strong> — <a href="https://example.com/feed" target="_blank" rel="noopener">https://example.com/feed</a> — <span class="error-reason">HTTP 404</span></li>
+    </ul>
+  </div>
+
+  <details class="removed-items" id="removed-items">
+    <summary>🗑 Removed Items (1)</summary>
+    <h3>Ad (1)</h3>
+    <ul>
+      <li><strong>Spam</strong> — <a href="https://example.com/ad" target="_blank" rel="noopener">Buy now</a></li>
+    </ul>
+  </details>
+
+</div>
+
+<footer>
+  AI Daily Digest &bull; Thursday, November 12, 2026 — 8:00 AM ET &bull; Sources: Gmail + 3 RSS items via techradar-agent
+</footer>
+
+<script>
+(function(){
+  const removedLink = document.querySelector('a[href="#removed-items"]');
+  if (removedLink) removedLink.addEventListener('click', () => { document.getElementById('removed-items').open = true; });
+  const active = new Set();
+  document.querySelectorAll('.filter-chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      active.has(chip.dataset.tag) ? active.delete(chip.dataset.tag) : active.add(chip.dataset.tag);
+      applyFilter();
+    });
+  });
+  function applyFilter() {
+    document.querySelectorAll('.filter-chip').forEach(c => {
+      c.classList.toggle('active', active.has(c.dataset.tag));
+      c.classList.toggle('dimmed', active.size > 0 && !active.has(c.dataset.tag));
+    });
+    document.querySelectorAll('.card').forEach(card => {
+      if (active.size === 0) { card.classList.remove('hidden'); return; }
+      const tags = (card.dataset.tags || '').split(' ');
+      card.classList.toggle('hidden', !tags.some(t => active.has(t)));
+    });
+    document.querySelectorAll('.subsection').forEach(sub => {
+      let el = sub.nextElementSibling, any = false;
+      while (el && !el.classList.contains('subsection') && !el.classList.contains('section-header')) {
+        if (el.classList.contains('card') && !el.classList.contains('hidden')) any = true;
+        el = el.nextElementSibling;
+      }
+      sub.classList.toggle('hidden', !any);
+    });
+    document.querySelectorAll('.section-block').forEach(block => {
+      const any = [...block.querySelectorAll('.card')].some(c => !c.classList.contains('hidden'));
+      block.classList.toggle('hidden', !any);
+    });
+  }
+})();
+</script>
+</body>
+</html>
