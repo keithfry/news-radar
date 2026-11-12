@@ -118,6 +118,17 @@ _CSS = """\
   .podcast-subscribe:hover { background: rgba(96,165,250,0.1); }"""
 
 
+# Bar rules for a page that keeps the inline _CSS (home_url set, stylesheet not).
+# Added only when the bar is present, so default output is unchanged.
+_SITE_BAR_CSS = """\
+  .site-bar { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; background: #0f172a; padding: 10px 20px; font-size: 14px; }
+  .site-bar-home { color: #f1f5f9; font-weight: 700; text-decoration: none; }
+  .site-bar-crumbs { list-style: none; display: flex; flex-wrap: wrap; gap: 6px; color: #94a3b8; }
+  .site-bar-crumbs li + li::before { content: "/"; margin-right: 6px; }
+  .site-bar-crumbs a { color: #93c5fd; text-decoration: none; }
+  .site-bar-crumbs [aria-current="page"] { color: #cbd5e1; }"""
+
+
 def site_bar_html(home_url: str, home_label: str, crumbs: list[tuple[str, str | None]]) -> str:
     """Bar linking back to the parent site, then a breadcrumb.
 
@@ -134,7 +145,7 @@ def site_bar_html(home_url: str, home_label: str, crumbs: list[tuple[str, str | 
     )
     return (
         '<nav class="site-bar" aria-label="Site">\n'
-        f'  <a class="site-bar-home" href="{escape(home_url)}">{escape(home_label)}</a>\n'
+        f'  <a class="site-bar-home" href="{escape(home_url)}">{escape(home_label or home_url)}</a>\n'
         '  <ol class="site-bar-crumbs">\n'
         f"{items}"
         "  </ol>\n"
@@ -270,6 +281,7 @@ def generate_html(
     style_html = (
         f'<link rel="stylesheet" href="{escape(stylesheet_href)}">'
         if stylesheet_href else
+        f"<style>\n{_CSS}\n{_SITE_BAR_CSS}\n</style>" if site_bar else
         f"<style>\n{_CSS}\n</style>"
     )
     bar_html = f"{site_bar}\n" if site_bar else ""

@@ -22,7 +22,9 @@ author_email = "jane@example.com"
 # its inline <style> block, for example "site.css".
 # stylesheet = ""
 # home_url and home_label add a bar at the top of each digest that links back
-# to your main site, followed by a breadcrumb (section, topic, date).
+# to your main site, followed by a breadcrumb (section, topic, date). The bar
+# works with or without stylesheet; without it, the bar gets built-in styles.
+# home_label defaults to home_url when unset.
 # home_url = ""
 # home_label = ""
 # section_label: the breadcrumb's first entry. Defaults to title above.

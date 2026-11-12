@@ -107,3 +107,22 @@ def test_section_label_falls_back_to_site_title():
     site = SiteConfig(title="My Radar", home_url="https://example.com/", home_label="Home")
     _, bar = digest_page_chrome(site, "AI", "AI", datetime(2026, 11, 12))
     assert '<li><a href="../../">My Radar</a></li>' in bar
+
+
+def test_bar_without_stylesheet_gets_inline_rules():
+    bar = site_bar_html("https://keithfry.net/", "Keith Fry", _CRUMBS)
+    html = sample_digest_html(site_bar=bar)
+    style = html[html.index("<style>"):html.index("</style>")]
+    assert ".site-bar {" in style
+    assert ".site-bar-crumbs li + li::before" in style
+
+
+def test_bar_with_stylesheet_adds_no_inline_rules():
+    bar = site_bar_html("https://keithfry.net/", "Keith Fry", _CRUMBS)
+    html = sample_digest_html(site_bar=bar, stylesheet_href="../../radar.css")
+    assert "<style>" not in html
+
+
+def test_empty_home_label_falls_back_to_url():
+    bar = site_bar_html("https://keithfry.net/", "", _CRUMBS)
+    assert '<a class="site-bar-home" href="https://keithfry.net/">https://keithfry.net/</a>' in bar
