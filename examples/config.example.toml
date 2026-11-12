@@ -17,6 +17,16 @@ author_email = "jane@example.com"
 # site's docroot (e.g. output_root = "../my-site/techradar" but base_url points
 # at "my-site"'s root) — set it to "techradar" in that case.
 # public_path_prefix = ""
+# Optional page chrome. Leave these unset to keep the built-in inline styles.
+# stylesheet: a CSS file under output_root that every digest links in place of
+# its inline <style> block, for example "site.css".
+# stylesheet = ""
+# home_url and home_label add a bar at the top of each digest that links back
+# to your main site, followed by a breadcrumb (section, topic, date).
+# home_url = ""
+# home_label = ""
+# section_label: the breadcrumb's first entry. Defaults to title above.
+# section_label = ""
 
 [models]
 # Base/default models — any topic file can override a subset of these in its

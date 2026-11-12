@@ -40,6 +40,14 @@ class SiteConfig:
     # subdirectory of a larger site). Empty (default) means output_root IS the
     # docroot, so URLs are just f"{base_url}/{topic.output_dir}/...".
     public_path_prefix: str = ""
+    # Opt-in page chrome. All empty (default) keeps the inline stylesheet and
+    # no site bar. stylesheet is a path relative to output_root; pages link it
+    # by relative URL. home_url turns on a bar linking back to the parent site.
+    stylesheet: str = ""
+    home_url: str = ""
+    home_label: str = ""
+    # First breadcrumb in the site bar; falls back to title when empty.
+    section_label: str = ""
 
 
 @dataclass
@@ -181,6 +189,10 @@ def load_config(config_path: str | Path, env_file: str | Path | None = None) -> 
         author_name=site_raw.get("author_name", ""),
         author_email=site_raw.get("author_email", ""),
         public_path_prefix=site_raw.get("public_path_prefix", "").strip("/"),
+        stylesheet=site_raw.get("stylesheet", ""),
+        home_url=site_raw.get("home_url", ""),
+        home_label=site_raw.get("home_label", ""),
+        section_label=site_raw.get("section_label", ""),
     )
 
     models_raw = raw.get("models", {})
