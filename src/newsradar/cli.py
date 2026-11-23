@@ -51,6 +51,7 @@ from .output_writer import save_html, save_json, write_outputs
 from .podcast_generator import generate_podcast
 from .podcast_rss import generate_podcast_rss
 from .topics import Topic
+from .tuning.evidence import EvidenceRecorder
 
 MAX_LINKS_PER_EMAIL = 5
 
@@ -117,6 +118,15 @@ def _is_webinar_summary(summary: str) -> bool:
 _ad_verdicts: dict[tuple[str, str, str], tuple[bool, str]] = {}
 _ad_verdicts_lock = threading.Lock()
 
+# Set by main() for a normal scan when [tuning] is enabled. None means no evidence is kept.
+_evidence: EvidenceRecorder | None = None
+
+
+def _evidence_source_type(item: dict, source_type: str) -> str:
+    if source_type == "email":
+        return "email"
+    return "linked_article" if item.get("_from_email_link") else "feed"
+
 
 def _classify_ad_once(title: str, text: str, model: str) -> tuple[bool, str]:
     key = (model, title, text)
@@ -151,11 +161,24 @@ def _process_one(
 
     if not arxiv and _is_advertisement(title):
         log(f"    [{idx}] → skip (advertisement)")
+        if _evidence is not None:
+            _evidence.record_ad(
+                topic=topic.name, item=item, title=title, text=existing_text,
+                source_type=_evidence_source_type(item, source_type),
+                verdict="heuristic", reason="title phrase", model="",
+            )
         removed.append(removal_record(item, "advertisement"))
         return None
 
     if models.ad_gate_enabled and not arxiv:
         is_ad, ad_reason = _classify_ad_once(title, existing_text[:1000], models.ad_detector_model)
+        if _evidence is not None:
+            _evidence.record_ad(
+                topic=topic.name, item=item, title=title, text=existing_text,
+                source_type=_evidence_source_type(item, source_type),
+                verdict="ad" if is_ad else "not_ad", reason=ad_reason,
+                model=models.ad_detector_model,
+            )
         if is_ad:
             log(f"    [{idx}] → skip (ad gate: {ad_reason})")
             removed.append(removal_record(item, "ad detector"))
@@ -492,7 +515,15 @@ def _run_topic(
     # --- Step 5: Deduplicate ---
     log(f"── Step 5: Deduplicating {len(all_items)} items "
         f"({len(processed_emails)} newsletters + {len(processed_links)} linked + {len(processed_rss)} RSS) ──")
+    sent_to_dedup = [item for item in all_items if not item.get("_is_arxiv")]
     all_items = deduplicate(all_items, models.dedup_model, models.dedup_batch_size, removed=removed)
+    if _evidence is not None and len(sent_to_dedup) > 1:
+        kept_ids = {id(item) for item in all_items}
+        _evidence.record_dedup(
+            topic=topic.name,
+            titles=[item.get("title", "") for item in sent_to_dedup],
+            dropped=[i for i, item in enumerate(sent_to_dedup) if id(item) not in kept_ids],
+        )
     log(f"  {len(all_items)} items after deduplication")
     log("")
 
@@ -659,7 +690,7 @@ def _add_run_args(parser: argparse.ArgumentParser) -> None:
 
 
 def main() -> None:
-    global _log_file
+    global _log_file, _evidence
 
     parser = _build_parser()
     args = parser.parse_args()
@@ -703,6 +734,9 @@ def main() -> None:
 
     if args.hours is None:
         args.hours = config.pipeline.lookback_hours
+
+    if config.tuning.enabled and not args.podcast_only and not args.transcript_only:
+        _evidence = EvidenceRecorder(config.tuning.data_dir, as_of.strftime("%Y-%m-%d"))
 
     publish_hook = _resolve_publish_hook(args.publish_hook or config.publish_hook)
 
