@@ -19,6 +19,7 @@ from newsradar.tuning.judge import (
     judge_dedup,
     second_opinion_ad,
     second_opinion_dedup,
+    second_opinion_rule,
 )
 
 TUNING = TuningConfig()
@@ -206,7 +207,8 @@ def test_second_opinion_prompt_omits_first_verdict(fake_claude):
 def test_second_opinion_ad_returns_is_ad(fake_claude, answer):
     fake_claude.reply = lambda p: {"is_ad": answer, "ad_type": "sponsor_content" if answer else "not_ad",
                                    "reason": "x"}
-    assert second_opinion_ad(rec("k1"), TUNING) is answer
+    fake_claude.cost = 0.03
+    assert second_opinion_ad(rec("k1"), TUNING) == (answer, 0.03)
     call = fake_claude.calls[0]
     assert call["model"] == "claude-opus-5-5" and call["effort"] == "medium" and call["json_schema"]
     assert call["system_prompt"] != judge._prompt("judge_ads.md")
@@ -309,7 +311,8 @@ CASE = DedupCase(titles=["A launch", "A launches", "B", "C"], expected_groups=[[
                                             ([[0, 1], [2, 3]], False)])
 def test_second_opinion_dedup_compares_groups(fake_claude, groups, agrees):
     fake_claude.reply = lambda p: {"groups": groups, "reason": "x"}
-    assert second_opinion_dedup(CASE, TUNING) is agrees
+    fake_claude.cost = 0.02
+    assert second_opinion_dedup(CASE, TUNING) == (agrees, 0.02)
 
 
 def test_second_opinion_dedup_prompt_hides_expected_groups_and_note(fake_claude):
@@ -326,8 +329,49 @@ def test_second_opinion_dedup_bad_index_raises(fake_claude):
         second_opinion_dedup(CASE, TUNING)
 
 
+# ---------- second_opinion_rule ----------
+
+RULE = "Output is_ad: true for any newsletter issue."
+
+
+@pytest.mark.parametrize("reply,approved", [
+    ({"sound": True, "would_remove": [], "reason": "x"}, True),
+    ({"sound": True, "would_remove": [1], "reason": "x"}, False),
+    ({"sound": False, "would_remove": [], "reason": "x"}, False),
+])
+def test_second_opinion_rule_approves_only_a_sound_rule_that_keeps_all(fake_claude, reply, approved):
+    fake_claude.reply = lambda p: reply
+    fake_claude.cost = 0.04
+    records = [rec("k1", title="News one"), rec("k2", title="News two")]
+    assert second_opinion_rule(RULE, records, TUNING) == (approved, 0.04)
+    call = fake_claude.calls[0]
+    assert call["system_prompt"] == judge._prompt("second_opinion_rule.md") and call["json_schema"]
+
+
+def test_second_opinion_rule_prompt_has_rule_and_items_but_no_verdicts(fake_claude):
+    fake_claude.reply = lambda p: {"sound": True, "would_remove": [], "reason": "x"}
+    second_opinion_rule(RULE, [rec("k1", title="News one", reason="GATE-REASON", text_sent="EXCERPT")], TUNING)
+    prompt = fake_claude.calls[0]["prompt"]
+    assert RULE in prompt and "News one" in prompt and "EXCERPT" in prompt
+    assert "GATE-REASON" not in prompt and '"verdict"' not in prompt and "FULL" not in prompt
+
+
+def test_second_opinion_rule_caps_items(fake_claude):
+    fake_claude.reply = lambda p: {"sound": True, "would_remove": [], "reason": "x"}
+    second_opinion_rule(RULE, [rec(f"k{i}", title=f"News {i}") for i in range(30)], TUNING)
+    prompt = fake_claude.calls[0]["prompt"]
+    assert "News 19" in prompt and "News 20" not in prompt
+
+
+def test_second_opinion_rule_bad_id_raises(fake_claude):
+    fake_claude.reply = lambda p: {"sound": True, "would_remove": [5], "reason": "x"}
+    with pytest.raises(JudgeError):
+        second_opinion_rule(RULE, [rec("k1")], TUNING)
+
+
 # ---------- prompts ----------
 
-@pytest.mark.parametrize("name", ["judge_ads.md", "judge_dedup.md", "second_opinion.md"])
+@pytest.mark.parametrize("name", ["judge_ads.md", "judge_dedup.md", "second_opinion.md",
+                                  "second_opinion_rule.md"])
 def test_prompts_load_from_package(name):
     assert len(judge._prompt(name)) > 500

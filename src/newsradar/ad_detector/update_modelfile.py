@@ -13,11 +13,11 @@ from pathlib import Path
 
 _PACKAGE_DIR = Path(__file__).parent
 _REPO_ROOT = _PACKAGE_DIR.parent.parent.parent
-_DEFAULT_DATA_PATH = _REPO_ROOT / "tests" / "test_data" / "labeled_examples.json"
-_DEFAULT_MODELFILE_PATH = _PACKAGE_DIR / "AdDetectorModelfile"
+DEFAULT_DATA_PATH = _REPO_ROOT / "tests" / "test_data" / "labeled_examples.json"
+DEFAULT_MODELFILE_PATH = _PACKAGE_DIR / "AdDetectorModelfile"
 MAX_EXAMPLES = 25  # per class
 
-_SECTION_START = "TRAINING EXAMPLES (memorize these):\n"
+TRAINING_SECTION_START = "TRAINING EXAMPLES (memorize these):\n"
 _SECTION_END = '"""\n'
 
 LEARNED_RULES_START = "LEARNED RULES (added by the tuner):\n"
@@ -42,7 +42,7 @@ def format_training_block(examples: list[dict]) -> str:
         if i < len(not_ads):
             interleaved.append(not_ads[i])
 
-    lines = [_SECTION_START]
+    lines = [TRAINING_SECTION_START]
     for e in interleaved:
         is_ad = e["is_ad"]
         reason = e.get("notes", "").strip() or e.get("ad_type", "")
@@ -66,9 +66,9 @@ def generate_training_block(examples: list[dict], max_per_class: int = MAX_EXAMP
 
 def replace_training_block(content: str, block: str) -> str:
     """Return content with the TRAINING EXAMPLES section replaced by block."""
-    start_idx = content.find(_SECTION_START)
+    start_idx = content.find(TRAINING_SECTION_START)
     if start_idx == -1:
-        print(f"[warn] Could not find '{_SECTION_START.strip()}' marker in Modelfile.")
+        print(f"[warn] Could not find '{TRAINING_SECTION_START.strip()}' marker in Modelfile.")
         print("[warn] Appending training block instead.")
         # Find end of SYSTEM block and insert before it
         end_sys = content.rfind(_SECTION_END)
@@ -122,8 +122,8 @@ def update_modelfile(
     modelfile_path: Path | None = None,
     max_per_class: int = MAX_EXAMPLES,
 ) -> None:
-    data_path = data_path or _DEFAULT_DATA_PATH
-    modelfile_path = modelfile_path or _DEFAULT_MODELFILE_PATH
+    data_path = data_path or DEFAULT_DATA_PATH
+    modelfile_path = modelfile_path or DEFAULT_MODELFILE_PATH
 
     examples = load_examples(data_path)
     ads = sum(1 for e in examples if e["is_ad"])

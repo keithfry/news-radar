@@ -103,6 +103,9 @@ DEDUP_SCHEMA = _obj({
 
 SECOND_AD_SCHEMA = _obj({"is_ad": _BOOL, "ad_type": _AD_TYPE, "reason": _STR})
 SECOND_DEDUP_SCHEMA = _obj({"groups": _GROUPS, "reason": _STR})
+SECOND_RULE_SCHEMA = _obj({"sound": _BOOL, "would_remove": {"type": "array", "items": {"type": "integer"}},
+                           "reason": _STR})
+RULE_CHECK_ITEMS = 20
 
 
 # ---------- helpers ----------
@@ -231,13 +234,38 @@ def judge_ads(records: list[AdRecord], tuning: TuningConfig, batch_size: int = 2
     return AdJudgement(verdicts=verdicts, proposed_rules=rules, cost_usd=cost)
 
 
-def second_opinion_ad(record: AdRecord, tuning: TuningConfig) -> bool:
+def second_opinion_ad(record: AdRecord, tuning: TuningConfig) -> tuple[bool, float]:
+    """Returns (is_ad, cost_usd) from a call that doesn't see the first verdict."""
     what = f"second opinion on ad key {record.key}"
     payload = json.dumps(_record_json(record, with_verdict=False), indent=2, ensure_ascii=False)
     prompt = f"Decide whether this item is an advertisement.\n\nItem:\n{payload}\n"
-    reply, _ = _call(prompt, "second_opinion.md", SECOND_AD_SCHEMA, tuning, what)
+    reply, cost = _call(prompt, "second_opinion.md", SECOND_AD_SCHEMA, tuning, what)
     _check_label(reply.get("is_ad"), reply.get("ad_type"), what)
-    return reply["is_ad"]
+    return reply["is_ad"], cost
+
+
+def second_opinion_rule(rule_text: str, records: list[AdRecord], tuning: TuningConfig) -> tuple[bool, float]:
+    """Check a remove-leaning rule against today's news items (records the judge
+    labeled not ads). Returns (approved, cost_usd). Approved only when the call
+    finds the rule sound and says it would remove none of the items. The call
+    sees neither the first judge's reasoning nor the gate's verdicts."""
+    items = records[:RULE_CHECK_ITEMS]
+    what = f"second opinion on rule {rule_text[:60]!r}"
+    payload = json.dumps(
+        {"rule": rule_text,
+         "items": [{"id": i, "title": r.title, "source": r.source, "text_sent": r.text_sent}
+                   for i, r in enumerate(items)]},
+        indent=2, ensure_ascii=False)
+    prompt = (f"Decide whether this rule is safe to add to the ad gate, checking it against "
+              f"{len(items)} news items.\n\n{payload}\n")
+    reply, cost = _call(prompt, "second_opinion_rule.md", SECOND_RULE_SCHEMA, tuning, what)
+    sound, would_remove = reply.get("sound"), reply.get("would_remove")
+    if not isinstance(sound, bool) or not isinstance(would_remove, list):
+        raise JudgeError(f"{what}: reply needs a boolean sound and a would_remove list")
+    for i in would_remove:
+        if type(i) is not int or not 0 <= i < len(items):
+            raise JudgeError(f"{what}: id {i!r} out of range for {len(items)} items")
+    return sound and not would_remove, cost
 
 
 # ---------- dedup ----------
@@ -296,10 +324,11 @@ def judge_dedup(records: list[DedupRecord], tuning: TuningConfig) -> tuple[list[
     return cases, cost, skipped
 
 
-def second_opinion_dedup(case: DedupCase, tuning: TuningConfig) -> bool:
+def second_opinion_dedup(case: DedupCase, tuning: TuningConfig) -> tuple[bool, float]:
+    """Returns (agrees, cost_usd): agrees when the call finds exactly the case's groups."""
     what = f"second opinion on dedup case {case.titles[:1]!r}"
     payload = json.dumps([{"id": i, "title": t} for i, t in enumerate(case.titles)], indent=2, ensure_ascii=False)
     prompt = f"Group the duplicates among these {len(case.titles)} titles.\n\nTitles:\n{payload}\n"
-    reply, _ = _call(prompt, "second_opinion.md", SECOND_DEDUP_SCHEMA, tuning, what)
+    reply, cost = _call(prompt, "second_opinion.md", SECOND_DEDUP_SCHEMA, tuning, what)
     groups = _check_groups(reply.get("groups"), len(case.titles), what)
-    return {frozenset(g) for g in groups} == {frozenset(g) for g in case.expected_groups}
+    return {frozenset(g) for g in groups} == {frozenset(g) for g in case.expected_groups}, cost

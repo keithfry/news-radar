@@ -125,6 +125,22 @@ def test_prune_reads_suffixed_snapshot_names_and_skips_unparsed(tmp_path):
     removed = s.prune("2026-11-23", 30)
     assert not first.exists() and not second.exists() and later_old.exists() and odd.exists()
     assert sorted(removed) == ["snapshots/2026-10-01", "snapshots/2026-10-01-2"]
+    assert s.latest_snapshot("2026-10-01") == later_old
+
+
+def test_rollback_reaches_the_snapshot_prune_keeps(tmp_path):
+    s = TuningStore(tmp_path)
+    kept = [_snap(s, n) for n in ("2026-10-01", "2026-10-01-2", "2026-10-01-3")][-1]
+    s.prune("2026-11-23", 30)
+    assert [p.name for p in (s.root / "snapshots").iterdir()] == ["2026-10-01-3"]
+    assert s.latest_snapshot("2026-10-01") == kept
+
+
+def test_snapshot_after_a_gap_gets_a_higher_suffix(tmp_path):
+    s = TuningStore(tmp_path)
+    _snap(s, "2026-11-23-3")
+    new = s.snapshot("2026-11-23", "m")
+    assert new.name == "2026-11-23-4" and s.latest_snapshot("2026-11-23") == new
 
 
 def test_prune_never_deletes_todays_report(tmp_path):

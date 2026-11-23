@@ -78,6 +78,9 @@ class Fakes:
         self.dedup_cases: list[DedupCase] = []
         self.second_opinion_ad = True
         self.second_opinion_dedup = True
+        self.second_opinion_rule = True
+        self.second_cost = 0.01
+        self.rule_checks: list[tuple[str, list[AdRecord]]] = []
         self.second_ad_keys: list[str] = []
         self.candidate_fix = False
         self.candidate_break_base = False
@@ -85,6 +88,7 @@ class Fakes:
         self.installed: list[str] = []
         self.modelfiles: dict[str, str] = {}
         self.fail_install_of: str | None = None
+        self.fail_install_times: int | None = None  # None fails every time
         self.removed: list[str] = []
 
     # scenario helpers
@@ -124,10 +128,14 @@ class Fakes:
 
     def second_ad(self, record, tuning):
         self.second_ad_keys.append(record.key)
-        return self.second_opinion_ad
+        return self.second_opinion_ad, self.second_cost
 
     def second_dedup(self, case, tuning):
-        return self.second_opinion_dedup
+        return self.second_opinion_dedup, self.second_cost
+
+    def second_rule(self, rule_text, records, tuning):
+        self.rule_checks.append((rule_text, list(records)))
+        return self.second_opinion_rule, self.second_cost
 
     def predict_ads(self, model, cases):
         out = []
@@ -150,7 +158,9 @@ class Fakes:
     def install(self, modelfile_path, model_name):
         self.installed.append(model_name)
         self.modelfiles[model_name] = Path(modelfile_path).read_text()
-        if model_name == self.fail_install_of:
+        if model_name == self.fail_install_of and self.fail_install_times != 0:
+            if self.fail_install_times is not None:
+                self.fail_install_times -= 1
             raise subprocess.CalledProcessError(1, ["ollama", "create", model_name])
 
     def remove(self, model_name):
@@ -164,6 +174,7 @@ def fakes(monkeypatch):
     monkeypatch.setattr(tuner, "judge_dedup", f.judge_dedup)
     monkeypatch.setattr(tuner, "second_opinion_ad", f.second_ad)
     monkeypatch.setattr(tuner, "second_opinion_dedup", f.second_dedup)
+    monkeypatch.setattr(tuner, "second_opinion_rule", f.second_rule)
     monkeypatch.setattr(tuner, "predict_ads", f.predict_ads)
     monkeypatch.setattr(tuner, "predict_dedup", f.predict_dedup)
     monkeypatch.setattr(tuner, "install_ad_detector_model", f.install)
@@ -231,6 +242,35 @@ def test_rebuild_failure_restores_previous_learned_data(cfg, evidence, fakes):
     assert store(cfg).ad_examples() == []
 
 
+def test_first_live_rebuild_fails_and_snapshot_rebuild_succeeds(cfg, evidence, fakes):
+    fakes.candidate_fixes_today_mistake()
+    fakes.fail_install_of = LIVE
+    fakes.fail_install_times = 1
+    out = run_tune(cfg, DATE, log=lambda s: None)
+    s = store(cfg)
+    snap = s.latest_snapshot(DATE)
+    text = out.report_path.read_text()
+    assert not out.ads_applied and f"Rebuilt {LIVE} from the snapshot" in text
+    assert fakes.installed[-2:] == [LIVE, LIVE]
+    assert fakes.modelfiles[LIVE] == (snap / "Modelfile").read_text()
+    assert s.ad_examples() == [] and not (snap / "learned_ad_examples.json").exists()
+
+
+def test_failed_restore_says_files_may_be_half_saved(cfg, evidence, fakes, monkeypatch):
+    fakes.candidate_fixes_today_mistake()
+    fakes.fail_install_of = LIVE
+
+    def broken_restore(self, snapshot_dir):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(TuningStore, "restore", broken_restore)
+    out = run_tune(cfg, DATE, log=lambda s: None)
+    text = out.report_path.read_text()
+    assert not out.ads_applied and "half-saved" in text and "disk full" in text
+    assert f"--rollback {DATE}" in text and "Applied nothing" not in text
+    assert "was undone" not in text
+
+
 def test_candidate_model_removed_and_old_evidence_pruned(cfg, evidence, fakes):
     fakes.candidate_fixes_today_mistake()
     run_tune(cfg, DATE, log=lambda s: None)
@@ -276,13 +316,26 @@ def test_rule_that_would_break_the_modelfile_is_dropped(cfg, evidence, fakes):
     assert "dropped" in out.report_path.read_text()
 
 
-def test_remove_leaning_rule_needs_second_opinion(cfg, evidence, fakes):
+def test_remove_leaning_rule_rejected_by_rule_check_is_dropped(cfg, evidence, fakes):
     fakes.candidate_fixes_today_mistake()
-    fakes.judge_proposes_ad_example()
-    fakes.second_opinion_ad = False
-    fakes.rules = [ProposedRule("Output is_ad: true for any giveaway.", "remove")]
-    run_tune(cfg, DATE, log=lambda s: None)
-    assert "giveaway" not in store(cfg).ad_rules()
+    fakes.second_opinion_rule = False
+    fakes.rules = [ProposedRule("Output is_ad: true for any newsletter issue.", "remove")]
+    out = run_tune(cfg, DATE, log=lambda s: None)
+    assert out.ads_applied and "newsletter issue" not in store(cfg).ad_rules()
+    rule, news = fakes.rule_checks[0]
+    assert rule == "Output is_ad: true for any newsletter issue."
+    # Only items the judge labeled not ads: the kept news and the false removal.
+    assert sorted(r.key for r in news) == ["k_fp_aaaaaaaa", "k_ok_aaaaaaaa"]
+
+
+def test_remove_leaning_rule_approved_by_rule_check_is_kept(cfg, evidence, fakes):
+    fakes.candidate_fixes_today_mistake()
+    fakes.rules = [ProposedRule("Output is_ad: true for an Advertise-with-us page.", "remove"),
+                   ProposedRule("Output is_ad: false for a news digest.", "keep")]
+    out = run_tune(cfg, DATE, log=lambda s: None)
+    rules = store(cfg).ad_rules()
+    assert out.ads_applied and "Advertise-with-us" in rules and "news digest" in rules
+    assert [r for r, _ in fakes.rule_checks] == ["Output is_ad: true for an Advertise-with-us page."]
 
 
 def test_dedup_change_is_applied_with_added_date(cfg, evidence, fakes):
@@ -309,6 +362,8 @@ def test_mistake_not_visible_in_excerpt_does_not_count(cfg, evidence, fakes):
     out = run_tune(cfg, DATE, log=lambda s: None)
     text = out.report_path.read_text()
     assert not out.ads_applied and "needs a longer input" in text.lower()
+    assert store(cfg).ad_examples() == [] and CANDIDATE not in fakes.installed
+    assert "not learned" in text
 
 
 def test_heuristic_records_skipped_and_removals_judged_first(cfg, evidence, fakes):
@@ -323,7 +378,7 @@ def test_report_lists_cost_skipped_and_commands(cfg, evidence, fakes):
     out = run_tune(cfg, DATE, log=lines.append)
     text = out.report_path.read_text()
     assert "AI Report issue 42" in text and "judge reason" in text
-    assert "$0.75" in text and "skipped: 2" in text
+    assert "$0.76" in text and "skipped: 2" in text  # 0.25 + 0.5 + one second opinion at 0.01
     assert f"newsradar tune --config {cfg.config_path} --rebuild" in text
     assert f"newsradar tune --config {cfg.config_path} --rollback {DATE}" in text
     assert len(lines) >= 1 and DATE in lines[-1]

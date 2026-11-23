@@ -10,7 +10,6 @@ models, and never runs git.
 
 from __future__ import annotations
 
-import importlib
 import shutil
 import subprocess
 from dataclasses import dataclass, field
@@ -19,8 +18,11 @@ from typing import Callable
 
 from newsradar.ad_detector.install import install_ad_detector_model
 from newsradar.ad_detector.update_modelfile import (
+    DEFAULT_DATA_PATH,
+    DEFAULT_MODELFILE_PATH,
     LEARNED_RULES_END,
     LEARNED_RULES_START,
+    TRAINING_SECTION_START,
     build_live_modelfile,
     load_examples,
 )
@@ -38,6 +40,7 @@ from newsradar.tuning.gate import (
     stabilize,
 )
 from newsradar.tuning.judge import (
+    RULE_CHECK_ITEMS,
     AdJudgement,
     AdVerdict,
     DedupCase,
@@ -48,18 +51,16 @@ from newsradar.tuning.judge import (
     judge_dedup,
     second_opinion_ad,
     second_opinion_dedup,
+    second_opinion_rule,
 )
 from newsradar.tuning.store import TuningStore
 
-# The package's __init__ re-exports a function named update_modelfile, which
-# shadows the module on attribute access.
-_um = importlib.import_module("newsradar.ad_detector.update_modelfile")
-BASE_MODELFILE = _um._DEFAULT_MODELFILE_PATH
-BASE_EXAMPLES = _um._DEFAULT_DATA_PATH
+BASE_MODELFILE = DEFAULT_MODELFILE_PATH
+BASE_EXAMPLES = DEFAULT_DATA_PATH
 
 # Text that would end the SYSTEM block or confuse the marker search in
 # build_live_modelfile, so it must never reach the learned files.
-_FORBIDDEN = ('"""', LEARNED_RULES_START.strip(), LEARNED_RULES_END.strip(), _um._SECTION_START.strip())
+_FORBIDDEN = ('"""', LEARNED_RULES_START.strip(), LEARNED_RULES_END.strip(), TRAINING_SECTION_START.strip())
 
 # A failure of any of these means the run can't trust its results and applies nothing.
 _RUN_ERRORS = (JudgeError, ClaudeCallError, GateError, subprocess.CalledProcessError, OSError)
@@ -191,6 +192,7 @@ class _Report:
     apply_lines: list[str] = field(default_factory=list)
     cleanup_lines: list[str] = field(default_factory=list)
     ads_status: str = "no change proposed"
+    undo_status: str = ""
     dedup_status: str = "no change proposed"
 
     def summary(self, path: Path) -> str:
@@ -247,7 +249,8 @@ class _Report:
         if hidden:
             out += ["## Needs a longer input", "",
                     "The judge says the 1,000-character excerpt the gate sees does not show the answer "
-                    "for these, so fixing them does not count toward accepting a change.", ""]
+                    "for these. They are not learned as examples, and fixing them does not count "
+                    "toward accepting a change.", ""]
             out += [f'- "{m.record.title}" ({m.record.source})' for m in hidden]
             out.append("")
 
@@ -268,8 +271,8 @@ class _Report:
             out += ["## Applied", ""] + self.apply_lines + [""]
 
         out += ["## Usage", "",
-                f"Judge cost: ${self.cost:.2f} (summed cost_usd of the judge calls). "
-                f"Second-opinion calls, not in that sum: {self.second_calls}.", ""]
+                f"Judge cost: ${self.cost:.2f}, the summed cost_usd of every judge and "
+                f"second-opinion call ({self.second_calls} second-opinion calls).", ""]
 
         if self.cleanup_lines:
             out += ["## Clean up", ""] + self.cleanup_lines + [""]
@@ -341,7 +344,9 @@ class _Tuner:
 
     def _second_ad(self, record: AdRecord) -> bool:
         self.rep.second_calls += 1
-        return second_opinion_ad(record, self.tuning)
+        agreed, cost = second_opinion_ad(record, self.tuning)
+        self.rep.cost += cost
+        return agreed
 
     def _second_opinions(self, records: list[AdRecord], judgement: AdJudgement) -> list[_Mistake]:
         by_key = {r.key: r for r in records}
@@ -367,11 +372,15 @@ class _Tuner:
         def label(e: dict) -> str:
             return "ad" if e["is_ad"] else "not ad"
 
-        # Mistakes whose answer shows in the excerpt go first: only they can get a change accepted.
-        usable = sorted((m for m in mistakes if m.second is not False),
-                        key=lambda m: not m.verdict.visible_in_excerpt)
-        for m in usable:
+        for m in mistakes:
+            if m.second is False:
+                continue
             ex = dict(m.verdict.example or {}, added=self.date)
+            if not m.verdict.visible_in_excerpt:
+                # The summary would show the misleading excerpt under the opposite label.
+                lines.append(f'- Example "{ex.get("title")}" not learned: the excerpt the gate reads '
+                             "does not show the answer (see Needs a longer input).")
+                continue
             problem = _modelfile_problem(str(ex.get("title", "")), str(ex.get("summary", "")),
                                          str(ex.get("notes", "")))
             if problem:
@@ -386,7 +395,9 @@ class _Tuner:
                 lines.append(f'- New example "{ex["title"]}" ({label(ex)}, id {ex["id"]}) from a mistake.')
 
         self._add_balancing_example(records, judgement, new, known_ids, cap)
-        rules = self._plan_rules(judgement.proposed_rules, mistakes)
+        by_key = {r.key: r for r in records}
+        news = [by_key[v.key] for v in judgement.verdicts if not v.is_ad]
+        rules = self._plan_rules(judgement.proposed_rules, news)
         if not new and rules is None:
             return None
         return _AdPlan(examples=stored + new,
@@ -424,14 +435,11 @@ class _Tuner:
         self.rep.example_lines.append(
             f"- No correctly handled {'ad' if want_ad else 'non-ad'} from today to balance the new examples.")
 
-    def _plan_rules(self, proposed: list[ProposedRule], mistakes: list[_Mistake]) -> str | None:
-        """Return the candidate rules text, or None when no rule was added."""
+    def _plan_rules(self, proposed: list[ProposedRule], news: list[AdRecord]) -> str | None:
+        """Return the candidate rules text, or None when no rule was added.
+        news is today's judged items the judge labeled not ads."""
         rules = self.store.ad_rules().strip()
         limit = self.tuning.max_rules_chars
-        # No second-opinion call takes a rule, so a remove-leaning rule stands
-        # only when the second opinion agreed on every missed ad from today.
-        missed_ads = [m for m in mistakes if m.verdict.is_ad]
-        remove_ok = bool(missed_ads) and all(m.second for m in missed_ads)
         added = False
         for rule in proposed:
             text = rule.text.strip()
@@ -439,11 +447,6 @@ class _Tuner:
             problem = _modelfile_problem(text)
             if problem:
                 self.rep.rule_lines.append(f"{where} dropped: {problem}.")
-                continue
-            if rule.leaning == "remove" and not remove_ok:
-                self.rep.rule_lines.append(
-                    f"{where} dropped: it makes the gate remove more, and the second opinion did not "
-                    "confirm every missed ad from today.")
                 continue
             if text in rules:
                 self.rep.rule_lines.append(f"{where} dropped: already learned.")
@@ -454,6 +457,16 @@ class _Tuner:
                     f"{where} dropped: the learned rules would reach {len(joined)} characters, over the "
                     f"limit of {limit}.")
                 continue
+            if rule.leaning == "remove":
+                self.rep.second_calls += 1
+                approved, cost = second_opinion_rule(text, news, self.tuning)
+                self.rep.cost += cost
+                if not approved:
+                    self.rep.rule_lines.append(
+                        f"{where} dropped: it makes the gate remove more, and the second opinion did not "
+                        f"approve it against {min(len(news), RULE_CHECK_ITEMS)} of today's news items.")
+                    continue
+                where += " (second opinion approved)"
             rules = joined
             added = True
             self.rep.rule_lines.append(f"{where} proposed.")
@@ -468,7 +481,8 @@ class _Tuner:
             where = f"- {case.kind}: {case.titles}, expected groups {case.expected_groups}.{note}"
             if case.kind == "missed_duplicate":
                 self.rep.second_calls += 1
-                agreed = second_opinion_dedup(case, self.tuning)
+                agreed, cost = second_opinion_dedup(case, self.tuning)
+                self.rep.cost += cost
                 if not agreed:
                     self.rep.dedup_lines.append(f"{where} Second opinion: disagreed, so it was dropped.")
                     continue
@@ -548,6 +562,29 @@ class _Tuner:
         candidate_ok = stabilize(current_ok, candidate_ok, rerun)
         return decide(meta, current_ok, candidate_ok)
 
+    def _undo(self, snap: Path, rebuild: bool) -> None:
+        """Put the learned files (and, with rebuild, the live model) back as the snapshot has them."""
+        lines = self.rep.apply_lines
+        rollback_cmd = f"newsradar tune --config {self.config.config_path} --rollback {self.date}"
+        try:
+            self.store.restore(snap)
+        except Exception as exc:
+            self.rep.undo_status = "restoring the snapshot failed too"
+            lines.append(f"- Restoring the learned files from {snap} failed: {type(exc).__name__}: "
+                         f"{_text(exc)}. The learned files may be half-saved. Run `{rollback_cmd}`.")
+            return
+        self.rep.undo_status = "was undone"
+        lines.append(f"- Learned files restored from {snap}; nothing from this run is kept.")
+        if not rebuild:
+            return
+        try:
+            _install(self.config, (snap / "Modelfile").read_text(encoding="utf-8"), self.live)
+            lines.append(f"- Rebuilt {self.live} from the snapshot.")
+        except Exception as exc:
+            lines.append(f"- Rebuilding {self.live} from the snapshot also failed: "
+                         f"{type(exc).__name__}: {_text(exc)}. The learned files are restored, "
+                         "so run the --rebuild command below once Ollama works.")
+
     def _apply(self, ad_plan: _AdPlan | None, dedup_plan: _DedupPlan | None) -> None:
         if not ad_plan and not dedup_plan:
             return
@@ -569,20 +606,12 @@ class _Tuner:
                 lines.append(f"- Rebuilt {self.live} from base plus learned data.")
         except Exception as exc:
             lines.append(f"- Applying failed: {type(exc).__name__}: {_text(exc)}.")
-            self.store.restore(snap)
-            lines.append(f"- Learned files restored from {snap}; nothing from this run is kept.")
-            self.rep.ads_status = "accepted, but applying failed and was undone" if ad_plan else self.rep.ads_status
-            self.rep.dedup_status = ("accepted, but applying failed and was undone" if dedup_plan
-                                     else self.rep.dedup_status)
+            self._undo(snap, rebuild=ad_plan is not None)
+            undone = self.rep.undo_status
             if ad_plan:
-                try:
-                    rollback_text = (snap / "Modelfile").read_text(encoding="utf-8")
-                    _install(self.config, rollback_text, self.live)
-                    lines.append(f"- Rebuilt {self.live} from the snapshot.")
-                except Exception as exc2:
-                    lines.append(f"- Rebuilding {self.live} from the snapshot also failed: "
-                                 f"{type(exc2).__name__}: {_text(exc2)}. The learned files are restored, "
-                                 "so run the --rebuild command below once Ollama works.")
+                self.rep.ads_status = f"accepted, but applying failed and {undone}"
+            if dedup_plan:
+                self.rep.dedup_status = f"accepted, but applying failed and {undone}"
             return
         self.outcome.ads_applied = ad_plan is not None
         self.outcome.dedup_applied = dedup_plan is not None

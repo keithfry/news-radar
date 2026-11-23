@@ -94,13 +94,28 @@ class TuningStore:
             parts.append(f"Articles:\n{titles}\nExpected duplicate groups: {groups}")
         return "\n\n".join(parts) + "\n"
 
-    def snapshot(self, date: str, built_modelfile: str) -> Path:
+    def _snapshots(self) -> list[tuple[tuple[_date, int], Path]]:
+        """Every snapshot folder whose name parses, with its (date, suffix number)."""
         base = self.root / "snapshots"
-        path = base / date
-        n = 2
-        while path.exists():
-            path = base / f"{date}-{n}"
-            n += 1
+        if not base.is_dir():
+            return []
+        found = []
+        for d in base.iterdir():
+            dated = _dated(d.name) if d.is_dir() else None
+            if dated is not None:
+                found.append((dated, d))
+        return sorted(found, key=lambda s: s[0])
+
+    def _snapshots_on(self, date: str) -> list[tuple[int, Path]]:
+        day = _date.fromisoformat(date)
+        return [(n, d) for (d_day, n), d in self._snapshots() if d_day == day]
+
+    def snapshot(self, date: str, built_modelfile: str) -> Path:
+        """Copy the learned files and built Modelfile into a new snapshot folder.
+        A later snapshot on the same day gets a suffix above every existing one."""
+        same_day = self._snapshots_on(date)
+        n = max(n for n, _ in same_day) + 1 if same_day else 1
+        path = self.root / "snapshots" / (date if n == 1 else f"{date}-{n}")
         path.mkdir(parents=True)
         for src in self._learned_files():
             if src.exists():
@@ -119,13 +134,9 @@ class TuningStore:
         return (snapshot_dir / _MODELFILE_NAME).read_text(encoding="utf-8")
 
     def latest_snapshot(self, date: str) -> Path | None:
-        base = self.root / "snapshots"
-        found = [base / date] if (base / date).is_dir() else []
-        n = 2
-        while (base / f"{date}-{n}").is_dir():
-            found.append(base / f"{date}-{n}")
-            n += 1
-        return found[-1] if found else None
+        """The snapshot on date with the highest suffix, gaps allowed."""
+        same_day = self._snapshots_on(date)
+        return max(same_day)[1] if same_day else None
 
     def prune(self, today: str, keep_days: int) -> list[str]:
         """Delete snapshots and reports dated more than keep_days before today.
@@ -136,16 +147,10 @@ class TuningStore:
         """
         cutoff = _date.fromisoformat(today) - timedelta(days=keep_days)
         removed: list[str] = []
-        base = self.root / "snapshots"
-        snaps = []
-        if base.is_dir():
-            for d in base.iterdir():
-                dated = _dated(d.name) if d.is_dir() else None
-                if dated is not None:
-                    snaps.append((dated, d))
+        snaps = self._snapshots()
         if snaps:
-            newest = max(snaps, key=lambda s: s[0])[1]
-            for (day, _), d in sorted(snaps, key=lambda s: s[0]):
+            newest = snaps[-1][1]
+            for (day, _), d in snaps:
                 if day < cutoff and d != newest:
                     shutil.rmtree(d, ignore_errors=True)
                     removed.append(f"snapshots/{d.name}")
