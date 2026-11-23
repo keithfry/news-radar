@@ -406,6 +406,28 @@ def test_report_lists_cost_skipped_and_commands(cfg, evidence, fakes):
     assert len(lines) >= 1 and DATE in lines[-1]
 
 
+def test_run_logs_each_step_in_order(cfg, evidence, fakes):
+    fakes.candidate_fixes_today_mistake()
+    lines: list[str] = []
+    run_tune(cfg, DATE, log=lines.append)
+    steps = ["loaded", "judging", "judging", "second opinions", "building and installing", "ads gate, ",
+             "ads gate accepted", "applying", "cleaning up"]
+    pos = -1
+    for step in steps:
+        pos = next((i for i in range(pos + 1, len(lines)) if step in lines[i]), -1)
+        assert pos >= 0, f"missing step {step!r} in order: {lines}"
+    assert DATE in lines[-1]
+
+
+def test_run_logs_the_dedup_gate(cfg, evidence, fakes):
+    fakes.dedup_cases = [WRONG_MERGE]
+    lines: list[str] = []
+    run_tune(cfg, DATE, log=lines.append)
+    gate = next(i for i, s in enumerate(lines) if "running the dedup gate" in s)
+    assert "dedup gate accepted" in lines[gate + 1]
+    assert "applying" in lines[gate + 2]
+
+
 def test_unexpected_exception_is_reported_not_raised(cfg, evidence, fakes):
     fakes.judge_error = KeyError("surprise")
     out = run_tune(cfg, DATE, log=lambda s: None)

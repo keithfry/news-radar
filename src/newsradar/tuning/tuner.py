@@ -290,13 +290,15 @@ class _Report:
 # ---------- the run ----------
 
 class _Tuner:
-    def __init__(self, config: Config, date: str, report: _Report, outcome: TuneOutcome):
+    def __init__(self, config: Config, date: str, report: _Report, outcome: TuneOutcome,
+                 log: Callable[[str], None] = lambda s: None):
         self.config = config
         self.tuning = config.tuning
         self.date = date
         self.store = TuningStore(config.tuning.data_dir)
         self.rep = report
         self.outcome = outcome
+        self.log = log
         self.live = live_model_name(config)
         self.candidate = candidate_model_name(config)
         self.candidate_attempted = False
@@ -306,20 +308,27 @@ class _Tuner:
         self.rep.bad_lines = bad
         if not ads and not dedups:
             self.rep.no_evidence = True
+            self.log(f"tune {self.date}: no evidence for this date")
             return
+        self.log(f"tune {self.date}: loaded {len(ads)} ad records and {len(dedups)} dedup batches")
 
         records = self._select_ads(ads)
+        if records:
+            self.log(f"tune {self.date}: judging {len(records)} ad records in {-(-len(records) // 20)} batches")
         judgement = judge_ads(records, self.tuning) if records else AdJudgement([], [], 0.0)
         self.rep.cost += judgement.cost_usd
         self.rep.ad_skipped = judgement.skipped
         self.rep.judged_ads -= judgement.skipped
         cases: list[DedupCase] = []
         if dedups:
+            self.log(f"tune {self.date}: judging {len(dedups)} dedup batches")
             cases, cost, skipped = judge_dedup(dedups, self.tuning)
             self.rep.cost += cost
             self.rep.dedup_skipped = skipped
         self.rep.dedup_batches = len(dedups)
 
+        self.log(f"tune {self.date}: second opinions for {sum(1 for v in judgement.verdicts if not v.correct)} "
+                 f"ad mistakes")
         mistakes = self._second_opinions(records, judgement)
         ad_plan = self._plan_ads(records, judgement, mistakes)
         dedup_plan = self._plan_dedup(cases)
@@ -328,10 +337,18 @@ class _Tuner:
         if ad_plan:
             self.rep.ad_gate = self._gate_ads(records, judgement, mistakes, ad_plan)
             self.rep.ads_status = "accepted" if self.rep.ad_gate.accepted else "rejected"
+            g = self.rep.ad_gate
+            self.log(f"tune {self.date}: ads gate {self.rep.ads_status}, current errors {g.current_errors}, "
+                     f"candidate errors {g.candidate_errors}")
         if dedup_plan:
+            self.log(f"tune {self.date}: running the dedup gate")
             self.rep.dedup_gate = self._gate_dedup(dedup_plan)
             self.rep.dedup_status = "accepted" if self.rep.dedup_gate.accepted else "rejected"
+            g = self.rep.dedup_gate
+            self.log(f"tune {self.date}: dedup gate {self.rep.dedup_status}, current errors {g.current_errors}, "
+                     f"candidate errors {g.candidate_errors}")
 
+        self.log(f"tune {self.date}: applying accepted changes, if any")
         self._apply(
             ad_plan if self.rep.ad_gate and self.rep.ad_gate.accepted else None,
             dedup_plan if self.rep.dedup_gate and self.rep.dedup_gate.accepted else None,
@@ -505,6 +522,7 @@ class _Tuner:
         return _DedupPlan(cases=stored + new, new_count=len(new))
 
     def _install_candidate(self, plan: _AdPlan) -> None:
+        self.log(f"tune {self.date}: building and installing the candidate model")
         text = _build_text(self.config, plan.examples, plan.rules)
         self.candidate_attempted = True
         _install(self.config, text, self.candidate)
@@ -531,6 +549,7 @@ class _Tuner:
                               expected=expected, today_mistake=mistake,
                               countable=v.visible_in_excerpt if mistake else True))
         self.rep.case_titles.update({c.id: c.title for c in cases})
+        self.log(f"tune {self.date}: ads gate, {len(cases)} cases")
 
         current_ok = [p == c.expected for p, c in zip(predict_ads(self.live, cases), cases, strict=True)]
         candidate_ok = [p == c.expected for p, c in zip(predict_ads(self.candidate, cases), cases, strict=True)]
@@ -625,12 +644,18 @@ class _Tuner:
             self.rep.dedup_status = "applied"
 
 
-def run_tune(config: Config, date: str, log: Callable[[str], None] = print) -> TuneOutcome:
-    """Run the daily tune for date. Never raises: every failure ends up in the report."""
+def run_tune(config: Config, date: str, log: Callable[[str], None] | None = None) -> TuneOutcome:
+    """Run the daily tune for date. Never raises: every failure ends up in the report.
+
+    The default log is the scan's timestamped, flushing log line, so `tail -f` follows the run.
+    """
+    if log is None:
+        from newsradar.cli import log as scan_log
+        log = scan_log
     store = TuningStore(config.tuning.data_dir)
     report = _Report(date=date, config_path=config.config_path)
     outcome = TuneOutcome(False, False, "", store.report_path(date))
-    tuner = _Tuner(config, date, report, outcome)
+    tuner = _Tuner(config, date, report, outcome, log)
     try:
         tuner.run()
     except _RUN_ERRORS as exc:
@@ -642,6 +667,7 @@ def run_tune(config: Config, date: str, log: Callable[[str], None] = print) -> T
     if report.error:
         outcome.ads_applied = outcome.dedup_applied = False
 
+    log(f"tune {date}: cleaning up and pruning old evidence")
     if tuner.candidate_attempted:
         try:
             remove_ollama_model(tuner.candidate)
