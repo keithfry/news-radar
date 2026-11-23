@@ -115,7 +115,13 @@ _CSS = """\
   .podcast-player { margin-top: 22px; display: flex; align-items: center; justify-content: center; gap: 12px; flex-wrap: wrap; }
   .podcast-player audio { max-width: 360px; width: 100%; height: 36px; border-radius: 18px; }
   .podcast-subscribe { font-size: 11px; font-weight: 700; color: #60a5fa; text-decoration: none; letter-spacing: 0.5px; padding: 6px 16px; border: 1px solid rgba(96,165,250,0.4); border-radius: 14px; white-space: nowrap; transition: background 0.15s; }
-  .podcast-subscribe:hover { background: rgba(96,165,250,0.1); }"""
+  .podcast-subscribe:hover { background: rgba(96,165,250,0.1); }
+  .card.kb-selected { box-shadow: 0 0 0 2px #2563eb; }
+  .card.kb-selected h3 a { color: #2563eb; text-decoration: underline; }
+  .card.kb-selected h3 a:focus { outline: none; }
+  .kb-help { margin-top: 16px; font-size: 11px; color: #94a3b8; }
+  .kb-help kbd { font-family: inherit; font-size: 10px; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.2); border-radius: 4px; padding: 1px 5px; color: #cbd5e1; }
+  @media (hover: none) { .kb-help { display: none; } }"""
 
 
 # Bar rules for a page that keeps the inline _CSS (home_url set, stylesheet not).
@@ -229,6 +235,60 @@ def _podcast_player_html(mp3_url: str | None, rss_url: str | None) -> str:
     )
 
 
+_KB_HELP_HTML = (
+    '\n  <div class="kb-help"><kbd>↓</kbd> or <kbd>n</kbd> next item &middot; '
+    '<kbd>↑</kbd> or <kbd>b</kbd> previous &middot; <kbd>Enter</kbd> open &middot; '
+    '<kbd>Esc</kbd> clear</div>'
+)
+
+# Keyboard navigation between cards: n or ArrowDown moves to the next visible
+# card, b or ArrowUp to the previous one. The selected card gets .kb-selected
+# and its title link takes focus, so Enter opens the article.
+_KB_NAV_JS = """\
+<script>
+(function(){
+  let current = null;
+  const visibleCards = () => [...document.querySelectorAll('.card')].filter(c => c.offsetParent !== null);
+  function mark(card) {
+    if (current) current.classList.remove('kb-selected');
+    current = card;
+    if (card) card.classList.add('kb-selected');
+  }
+  function select(card) {
+    mark(card);
+    card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    const link = card.querySelector('h3 a');
+    if (link) link.focus({ preventScroll: true });
+  }
+  function firstInView(cards, forward) {
+    if (forward) return cards.find(c => c.getBoundingClientRect().bottom > 0) || cards[0];
+    return [...cards].reverse().find(c => c.getBoundingClientRect().top < window.innerHeight) || cards[cards.length - 1];
+  }
+  document.addEventListener('keydown', e => {
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    if (e.target.closest && e.target.closest('input, textarea, select, [contenteditable]')) return;
+    let step = 0;
+    if (e.key === 'ArrowDown' || e.key === 'n') step = 1;
+    else if (e.key === 'ArrowUp' || e.key === 'b') step = -1;
+    else if (e.key === 'Escape') { mark(null); if (document.activeElement) document.activeElement.blur(); return; }
+    else return;
+    const cards = visibleCards();
+    if (!cards.length) return;
+    e.preventDefault();
+    const i = cards.indexOf(current);
+    if (i === -1) { select(firstInView(cards, step > 0)); return; }
+    select(cards[Math.min(Math.max(i + step, 0), cards.length - 1)]);
+  });
+  // Clicking a card makes it the starting point for the keys.
+  document.addEventListener('click', e => {
+    const card = e.target.closest && e.target.closest('.card');
+    if (card) mark(card);
+  });
+})();
+</script>
+"""
+
+
 def generate_html(
     newsletters: list[dict],
     articles: list[dict],
@@ -316,7 +376,7 @@ def generate_html(
   <h1>{digest_title}</h1>
   <div class="dateline">{dateline}</div>
   <div class="header-stats">
-{stats}  </div>{_podcast_player_html(mp3_url, podcast_rss_url)}
+{stats}  </div>{_podcast_player_html(mp3_url, podcast_rss_url)}{_KB_HELP_HTML}
 </div>
 
 """)
@@ -462,6 +522,7 @@ def generate_html(
         f"    }});\n"
         f"  }}\n"
         f"}})();\n</script>\n"
+        f"{_KB_NAV_JS}"
         f"</body>\n</html>\n"
     )
 
