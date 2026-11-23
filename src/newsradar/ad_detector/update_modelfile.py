@@ -20,28 +20,27 @@ MAX_EXAMPLES = 25  # per class
 _SECTION_START = "TRAINING EXAMPLES (memorize these):\n"
 _SECTION_END = '"""\n'
 
+LEARNED_RULES_START = "LEARNED RULES (added by the tuner):\n"
+LEARNED_RULES_END = "END LEARNED RULES\n"
+
 
 def load_examples(path: Path) -> list[dict]:
     data = json.loads(path.read_text(encoding="utf-8"))
     return [e for e in data["examples"] if e.get("is_ad") is not None]
 
 
-def generate_training_block(examples: list[dict], max_per_class: int = MAX_EXAMPLES) -> str:
+def format_training_block(examples: list[dict]) -> str:
+    """Format examples as the training section, interleaving ads and non-ads."""
     ads = [e for e in examples if e["is_ad"]]
     not_ads = [e for e in examples if not e["is_ad"]]
 
-    random.seed(42)
-    selected_ads = random.sample(ads, min(len(ads), max_per_class))
-    selected_ok = random.sample(not_ads, min(len(not_ads), max_per_class))
-
-    # Interleave ads and non-ads for better few-shot presentation
-    max_len = max(len(selected_ads), len(selected_ok))
+    max_len = max(len(ads), len(not_ads))
     interleaved: list[dict] = []
     for i in range(max_len):
-        if i < len(selected_ads):
-            interleaved.append(selected_ads[i])
-        if i < len(selected_ok):
-            interleaved.append(selected_ok[i])
+        if i < len(ads):
+            interleaved.append(ads[i])
+        if i < len(not_ads):
+            interleaved.append(not_ads[i])
 
     lines = [_SECTION_START]
     for e in interleaved:
@@ -55,10 +54,18 @@ def generate_training_block(examples: list[dict], max_per_class: int = MAX_EXAMP
     return "\n".join(lines)
 
 
-def rewrite_modelfile(modelfile_path: Path, training_block: str) -> None:
-    content = modelfile_path.read_text(encoding="utf-8")
+def generate_training_block(examples: list[dict], max_per_class: int = MAX_EXAMPLES) -> str:
+    ads = [e for e in examples if e["is_ad"]]
+    not_ads = [e for e in examples if not e["is_ad"]]
 
-    # Find and replace the TRAINING EXAMPLES section
+    random.seed(42)
+    selected_ads = random.sample(ads, min(len(ads), max_per_class))
+    selected_ok = random.sample(not_ads, min(len(not_ads), max_per_class))
+    return format_training_block(selected_ads + selected_ok)
+
+
+def replace_training_block(content: str, block: str) -> str:
+    """Return content with the TRAINING EXAMPLES section replaced by block."""
     start_idx = content.find(_SECTION_START)
     if start_idx == -1:
         print(f"[warn] Could not find '{_SECTION_START.strip()}' marker in Modelfile.")
@@ -67,15 +74,47 @@ def rewrite_modelfile(modelfile_path: Path, training_block: str) -> None:
         end_sys = content.rfind(_SECTION_END)
         if end_sys == -1:
             raise ValueError("Could not find end of SYSTEM block in Modelfile")
-        new_content = content[:end_sys] + "\n" + training_block + "\n" + content[end_sys:]
-    else:
-        # Find the end of the section (the closing """)
-        end_idx = content.find(_SECTION_END, start_idx)
-        if end_idx == -1:
-            raise ValueError("Malformed Modelfile: SYSTEM block not closed")
-        new_content = content[:start_idx] + training_block + "\n" + content[end_idx:]
+        return content[:end_sys] + "\n" + block + "\n" + content[end_sys:]
+    # Find the end of the section (the closing """)
+    end_idx = content.find(_SECTION_END, start_idx)
+    if end_idx == -1:
+        raise ValueError("Malformed Modelfile: SYSTEM block not closed")
+    return content[:start_idx] + block + "\n" + content[end_idx:]
 
-    modelfile_path.write_text(new_content, encoding="utf-8")
+
+def rewrite_modelfile(modelfile_path: Path, training_block: str) -> None:
+    content = modelfile_path.read_text(encoding="utf-8")
+    modelfile_path.write_text(replace_training_block(content, training_block), encoding="utf-8")
+
+
+def _newest_per_class(examples: list[dict], per_class: int) -> list[dict]:
+    chosen: list[dict] = []
+    for is_ad in (True, False):
+        group = [e for e in examples if bool(e["is_ad"]) == is_ad]
+        group.sort(key=lambda e: (e.get("added", ""), str(e.get("id", ""))))
+        chosen.extend(group[-per_class:] if per_class > 0 else [])
+    chosen.sort(key=lambda e: (e.get("added", ""), str(e.get("id", ""))))
+    return chosen
+
+
+def build_live_modelfile(
+    base_text: str,
+    base_examples: list[dict],
+    learned_examples: list[dict],
+    learned_rules: str,
+    per_class: int,
+) -> str:
+    """Build the live Modelfile from the committed base plus learned data.
+
+    Text above LEARNED_RULES_START is left byte-identical.
+    """
+    start = base_text.index(LEARNED_RULES_START) + len(LEARNED_RULES_START)
+    end = base_text.index(LEARNED_RULES_END, start)
+    rules = learned_rules.strip()
+    middle = rules + "\n" if rules else ""
+    text = base_text[:start] + middle + base_text[end:]
+    examples = list(base_examples) + _newest_per_class(learned_examples, per_class)
+    return replace_training_block(text, format_training_block(examples))
 
 
 def update_modelfile(
