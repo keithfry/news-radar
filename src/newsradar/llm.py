@@ -411,6 +411,20 @@ def _titles_match(echoed: str, actual: str) -> bool:
     return e == a or (len(e) >= _DEDUP_MIN_ECHO_PREFIX and a.startswith(e))
 
 
+# Learned duplicate-check examples from the tuner. "" means none. Assigning a str is atomic,
+# so dedup worker threads can read it without a lock.
+_learned_dedup_examples = ""
+
+
+def set_learned_dedup_examples(block: str) -> None:
+    global _learned_dedup_examples
+    _learned_dedup_examples = block
+
+
+def learned_dedup_examples() -> str:
+    return _learned_dedup_examples
+
+
 def _dedup_batch(batch: list[tuple[int, dict]], model: str) -> dict[int, int]:
     """Send one batch to LLM. Returns {dropped original index: kept index}.
 
@@ -425,6 +439,8 @@ def _dedup_batch(batch: list[tuple[int, dict]], model: str) -> dict[int, int]:
         return {}
 
     payload = [{"id": str(orig_i), "title": item["title"]} for orig_i, item in batch]
+    learned = _learned_dedup_examples.strip()
+    learned_section = f"{learned}\n\n" if learned else ""
     prompt = (
         "You are a news deduplication filter. Given a list of article titles, "
         "group duplicates — articles covering the same story, product release, "
@@ -438,6 +454,7 @@ def _dedup_batch(batch: list[tuple[int, dict]], model: str) -> dict[int, int]:
         "where confidence is how certain you are they cover the same story. "
         "List every member of each group. Articles that appear only once must not "
         "be listed. If there are no duplicates, return {\"groups\": []}.\n\n"
+        f"{learned_section}"
         f"Articles:\n{json.dumps(payload, indent=2)}\n\n"
         "Response (JSON only):"
     )

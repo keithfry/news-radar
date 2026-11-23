@@ -43,6 +43,7 @@ from .llm import (
     llm_stats,
     removal_record,
     removed_counts,
+    set_learned_dedup_examples,
     summarize,
     tag,
     unload_all_models,
@@ -52,6 +53,7 @@ from .podcast_generator import generate_podcast
 from .podcast_rss import generate_podcast_rss
 from .topics import Topic
 from .tuning.evidence import EvidenceRecorder
+from .tuning.store import TuningStore
 
 MAX_LINKS_PER_EMAIL = 5
 
@@ -737,6 +739,7 @@ def main() -> None:
 
     if config.tuning.enabled and not args.podcast_only and not args.transcript_only:
         _evidence = EvidenceRecorder(config.tuning.data_dir, as_of.strftime("%Y-%m-%d"))
+        set_learned_dedup_examples(TuningStore(config.tuning.data_dir).dedup_examples_block())
 
     publish_hook = _resolve_publish_hook(args.publish_hook or config.publish_hook)
 
