@@ -9,9 +9,10 @@ from newsradar import llm
 from newsradar.llm import classify_ad
 from newsradar.tuning.judge import DedupCase
 
-# Returned in place of a drop set when the model call fails. No case expects
-# index -1 to be dropped, so dedup_case_ok always scores it wrong.
-_FAILED = {-1}
+
+
+class GateError(Exception):
+    """A model call failed, so the gate cannot decide. The caller applies nothing."""
 
 
 @dataclass
@@ -35,15 +36,17 @@ class GateResult:
 
 
 def predict_ads(model: str, cases: list[Case]) -> list[bool]:
-    """Call the model fresh for each case (no verdict cache). A call that
-    raises returns the opposite of the expected answer, so it counts as wrong."""
+    """Call the model fresh for each case (no verdict cache). Raises GateError
+    when a call raises or classify_ad fails open with a parse error."""
     out: list[bool] = []
     for c in cases:
         try:
-            is_ad, _reason = classify_ad(c.title, c.text[:1000], model)
-            out.append(bool(is_ad))
-        except Exception:
-            out.append(not c.expected)
+            is_ad, reason = classify_ad(c.title, c.text[:1000], model)
+        except Exception as exc:
+            raise GateError(f"ad call failed for {c.id}: {exc}") from exc
+        if reason == "parse error":
+            raise GateError(f"ad call returned a parse error for {c.id}")
+        out.append(bool(is_ad))
     return out
 
 
@@ -53,16 +56,18 @@ def stabilize(
     rerun: Callable[[int], tuple[bool, bool]],
 ) -> list[bool]:
     """Keep a candidate difference only when a rerun of both models repeats it.
-    Unconfirmed differences, and reruns that raise, reset to the current value."""
+    Unconfirmed differences reset to the current value. A rerun that raises
+    propagates as GateError."""
     out = list(candidate)
-    for i, (cur, cand) in enumerate(zip(current, candidate)):
+    for i, (cur, cand) in enumerate(zip(current, candidate, strict=True)):
         if cur == cand:
             continue
         try:
             cur2, cand2 = rerun(i)
-        except Exception:
-            out[i] = cur
-            continue
+        except GateError:
+            raise
+        except Exception as exc:
+            raise GateError(f"rerun failed for case {i}: {exc}") from exc
         if not (cur2 == cur and cand2 == cand):
             out[i] = cur
     return out
@@ -72,7 +77,7 @@ def decide(cases: list[Case], current_ok: list[bool], candidate_ok: list[bool]) 
     fixed: list[str] = []
     broken: list[str] = []
     fixed_today = False
-    for c, cur, cand in zip(cases, current_ok, candidate_ok):
+    for c, cur, cand in zip(cases, current_ok, candidate_ok, strict=True):
         if not cur and cand:
             fixed.append(c.id)
             if c.today_mistake and c.countable:
@@ -108,7 +113,7 @@ def dedup_case_ok(case: DedupCase, dropped: set[int]) -> bool:
 
 def predict_dedup(cases: list[DedupCase], model: str, examples_block: str) -> list[set[int]]:
     """Run the voted dedup per case with the given learned block, then restore
-    the previous block. A failed call returns a drop set that scores wrong."""
+    the previous block. Raises GateError when a call fails."""
     previous = llm.learned_dedup_examples()
     llm.set_learned_dedup_examples(examples_block)
     try:
@@ -117,8 +122,8 @@ def predict_dedup(cases: list[DedupCase], model: str, examples_block: str) -> li
             batch = [(i, {"title": t}) for i, t in enumerate(c.titles)]
             try:
                 out.append(set(llm._dedup_voted(batch, model)))
-            except Exception:
-                out.append(set(_FAILED))
+            except Exception as exc:
+                raise GateError(f"dedup call failed: {exc}") from exc
         return out
     finally:
         llm.set_learned_dedup_examples(previous)

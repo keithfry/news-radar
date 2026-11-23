@@ -2,7 +2,7 @@ import pytest
 
 from newsradar import llm
 from newsradar.tuning import gate
-from newsradar.tuning.gate import Case, GateResult, decide, dedup_case_ok, predict_ads, predict_dedup, stabilize
+from newsradar.tuning.gate import Case, GateError, GateResult, decide, dedup_case_ok, predict_ads, predict_dedup, stabilize
 from newsradar.tuning.judge import DedupCase
 
 
@@ -46,15 +46,12 @@ def test_stabilize_keeps_only_differences_confirmed_on_rerun():
     assert stabilize(current, candidate, lambda i: reruns[i]) == [False, True]
 
 
-def test_stabilize_resets_when_rerun_raises_and_skips_agreeing_cases():
-    calls = []
-
+def test_stabilize_rerun_failure_raises_gate_error():
     def rerun(i):
-        calls.append(i)
         raise RuntimeError("boom")
 
-    assert stabilize([True, True], [True, False], rerun) == [True, True]
-    assert calls == [1]
+    with pytest.raises(GateError):
+        stabilize([True, True], [True, False], rerun)
 
 
 def test_dedup_case_ok():
@@ -80,13 +77,31 @@ def test_predict_ads_calls_classify_ad_with_truncated_text(monkeypatch):
     assert seen == [("T", 1000, "m")]
 
 
-def test_predict_ads_failure_is_a_wrong_prediction(monkeypatch):
+def test_predict_ads_raises_gate_error_when_the_model_raises(monkeypatch):
     def boom(*a):
         raise RuntimeError("down")
 
     monkeypatch.setattr(gate, "classify_ad", boom)
-    cs = [case("a", expected=True), case("b", expected=False)]
-    assert predict_ads("m", cs) == [False, True]
+    with pytest.raises(GateError):
+        predict_ads("current", [case("a")])
+
+
+def test_predict_ads_raises_gate_error_when_only_the_candidate_raises(monkeypatch):
+    def fake(title, text, model):
+        if model == "cand":
+            raise RuntimeError("down")
+        return False, "ok"
+
+    monkeypatch.setattr(gate, "classify_ad", fake)
+    assert predict_ads("cur", [case("a")]) == [False]
+    with pytest.raises(GateError):
+        predict_ads("cand", [case("a")])
+
+
+def test_predict_ads_parse_error_raises_gate_error(monkeypatch):
+    monkeypatch.setattr(gate, "classify_ad", lambda *a: (False, "parse error"))
+    with pytest.raises(GateError):
+        predict_ads("m", [case("a")])
 
 
 def test_predict_dedup_sets_block_and_restores_previous(monkeypatch):
@@ -107,7 +122,7 @@ def test_predict_dedup_sets_block_and_restores_previous(monkeypatch):
         llm.set_learned_dedup_examples("")
 
 
-def test_predict_dedup_restores_block_and_fails_case_on_error(monkeypatch):
+def test_predict_dedup_error_raises_gate_error_and_restores_block(monkeypatch):
     llm.set_learned_dedup_examples("OLD")
 
     def boom(batch, model):
@@ -116,8 +131,8 @@ def test_predict_dedup_restores_block_and_fails_case_on_error(monkeypatch):
     monkeypatch.setattr(gate.llm, "_dedup_voted", boom)
     c = DedupCase(titles=["A", "B"], expected_groups=[[0], [1]], kind="wrong_merge", note="")
     try:
-        out = predict_dedup([c], "m", "NEW")
+        with pytest.raises(GateError):
+            predict_dedup([c], "m", "NEW")
         assert llm.learned_dedup_examples() == "OLD"
-        assert not dedup_case_ok(c, out[0])
     finally:
         llm.set_learned_dedup_examples("")
