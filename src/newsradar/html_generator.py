@@ -121,7 +121,13 @@ _CSS = """\
   .card.kb-selected h3 a:focus { outline: none; }
   .kb-help { margin-top: 16px; font-size: 11px; color: #94a3b8; }
   .kb-help kbd { font-family: inherit; font-size: 10px; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.2); border-radius: 4px; padding: 1px 5px; color: #cbd5e1; }
-  @media (hover: none) { .kb-help { display: none; } }"""
+  @media (hover: none) { .kb-help { display: none; } }
+  .nav-buttons { display: none; }
+  @media (hover: none) { .nav-buttons { display: block; } body { padding-bottom: 84px; } }
+  .nav-btn { position: fixed; bottom: calc(16px + env(safe-area-inset-bottom)); z-index: 200; width: 52px; height: 52px; border-radius: 50%; font-family: inherit; font-size: 22px; line-height: 1; color: #2563eb; background: white; border: 1px solid #2563eb; box-shadow: 0 4px 14px rgba(0,0,0,0.2); cursor: pointer; -webkit-tap-highlight-color: transparent; }
+  .nav-btn:active { background: #2563eb; color: white; }
+  .nav-next { right: 16px; }
+  .nav-prev { left: 16px; }"""
 
 
 # Bar rules for a page that keeps the inline _CSS (home_url set, stylesheet not).
@@ -241,9 +247,19 @@ _KB_HELP_HTML = (
     '<kbd>Esc</kbd> clear</div>'
 )
 
-# Keyboard navigation between cards: n or ArrowDown moves to the next visible
-# card, b or ArrowUp to the previous one. The selected card gets .kb-selected
-# and its title link takes focus, so Enter opens the article.
+# Buttons fixed to the bottom corners for touch screens, where there are no
+# arrow keys. CSS shows them only on devices without hover. Next sits on the
+# right, where a right thumb rests.
+_NAV_BUTTONS_HTML = (
+    '<div class="nav-buttons">\n'
+    '  <button class="nav-btn nav-prev" data-step="-1" aria-label="Previous item">&uarr;</button>\n'
+    '  <button class="nav-btn nav-next" data-step="1" aria-label="Next item">&darr;</button>\n'
+    '</div>\n'
+)
+
+# Navigation between cards: n, ArrowDown or the next button moves to the next
+# visible card; b, ArrowUp or the previous button moves back. The selected
+# card gets .kb-selected and its title link takes focus, so Enter opens it.
 _KB_NAV_JS = """\
 <script>
 (function(){
@@ -264,22 +280,24 @@ _KB_NAV_JS = """\
     if (forward) return cards.find(c => c.getBoundingClientRect().bottom > 0) || cards[0];
     return [...cards].reverse().find(c => c.getBoundingClientRect().top < window.innerHeight) || cards[cards.length - 1];
   }
-  document.addEventListener('keydown', e => {
-    if (e.metaKey || e.ctrlKey || e.altKey) return;
-    if (e.target.closest && e.target.closest('input, textarea, select, [contenteditable]')) return;
-    let step = 0;
-    if (e.key === 'ArrowDown' || e.key === 'n') step = 1;
-    else if (e.key === 'ArrowUp' || e.key === 'b') step = -1;
-    else if (e.key === 'Escape') { mark(null); if (document.activeElement) document.activeElement.blur(); return; }
-    else return;
+  function move(step) {
     const cards = visibleCards();
     if (!cards.length) return;
-    e.preventDefault();
     const i = cards.indexOf(current);
     if (i === -1) { select(firstInView(cards, step > 0)); return; }
     select(cards[Math.min(Math.max(i + step, 0), cards.length - 1)]);
+  }
+  document.addEventListener('keydown', e => {
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    if (e.target.closest && e.target.closest('input, textarea, select, [contenteditable]')) return;
+    if (e.key === 'ArrowDown' || e.key === 'n') { e.preventDefault(); move(1); }
+    else if (e.key === 'ArrowUp' || e.key === 'b') { e.preventDefault(); move(-1); }
+    else if (e.key === 'Escape') { mark(null); if (document.activeElement) document.activeElement.blur(); }
   });
-  // Clicking a card makes it the starting point for the keys.
+  document.querySelectorAll('.nav-btn').forEach(btn => {
+    btn.addEventListener('click', () => move(Number(btn.dataset.step)));
+  });
+  // Clicking a card makes it the starting point for the keys and buttons.
   document.addEventListener('click', e => {
     const card = e.target.closest && e.target.closest('.card');
     if (card) mark(card);
@@ -522,7 +540,7 @@ def generate_html(
         f"    }});\n"
         f"  }}\n"
         f"}})();\n</script>\n"
-        f"{_KB_NAV_JS}"
+        f"{_NAV_BUTTONS_HTML}{_KB_NAV_JS}"
         f"</body>\n</html>\n"
     )
 

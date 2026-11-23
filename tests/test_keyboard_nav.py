@@ -55,3 +55,20 @@ def test_inline_css_styles_selection_and_hides_help_on_touch():
     html = _digest()
     assert ".card.kb-selected {" in html
     assert "@media (hover: none) { .kb-help { display: none; } }" in html
+
+
+def test_touch_buttons_put_next_on_the_right():
+    html = _digest()
+    buttons = re.search(r'<div class="nav-buttons">(.*?)</div>', html, re.DOTALL).group(1)
+    prev_at, next_at = buttons.index('data-step="-1"'), buttons.index('data-step="1"')
+    assert prev_at < next_at
+    assert ".nav-next { right: 16px; }" in html
+    assert ".nav-prev { left: 16px; }" in html
+    assert html.index('class="nav-buttons"') < html.rindex("<script>")
+
+
+def test_touch_buttons_show_only_without_hover():
+    html = _digest()
+    assert ".nav-buttons { display: none; }" in html
+    assert "@media (hover: none) { .nav-buttons { display: block; }" in html
+    assert "querySelectorAll('.nav-btn')" in html
