@@ -27,6 +27,7 @@ import pytest
 
 from newsradar.cli import _is_advertisement
 from newsradar.llm import classify_ad
+from newsradar.tuning.store import domain_only
 
 from conftest import ollama_has_model
 
@@ -37,6 +38,11 @@ _AD_DETECTOR_MODEL = "ad-detector"
 def _load_examples() -> list[dict]:
     data = json.loads(_DATA_PATH.read_text(encoding="utf-8"))
     return [e for e in data["examples"] if e.get("is_ad") is not None]
+
+
+def test_labeled_example_links_are_domain_only():
+    for e in _load_examples():
+        assert e["link"] in ("", domain_only(e["link"])), e["id"]
 
 
 def _metrics(y_true: list[bool], y_pred: list[bool]) -> dict:

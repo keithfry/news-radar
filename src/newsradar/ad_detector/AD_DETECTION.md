@@ -52,6 +52,50 @@ Schema per example:
 }
 ```
 
+## Daily Tuner
+
+`newsradar tune --config <config> [--date YYYY-MM-DD] [--rebuild] [--rollback YYYY-MM-DD]`
+reviews one day of ad-gate and dedup decisions, asks a judge model (Claude) to find
+mistakes, and applies a change only if it passes a regression gate. It runs only when
+`[tuning] enabled = true` in the config. A tuner failure never changes the exit status
+of `run-agent.sh`.
+
+### Where the data lives
+
+Everything is under `[tuning] data_dir`, which defaults to `data/` in the news-radar
+repo. `.gitignore` excludes it, so learned data is never committed.
+
+| Path | Contents |
+|---|---|
+| `data/evidence/DATE/` | The day's ad-gate and dedup decisions, written by the scan |
+| `data/tuning/learned_ad_examples.json` | Learned ad and not-ad examples (a JSON list) |
+| `data/tuning/learned_ad_rules.txt` | Learned rule text added to the system prompt |
+| `data/tuning/learned_dedup_cases.json` | Learned dedup cases |
+| `data/tuning/snapshots/` | A copy of the learned files and built Modelfile from before each applied change |
+| `data/tuning/reports/DATE.md` | The report for that day |
+| `data/tuning/build/` | Scratch space for candidate builds, deleted at the end of each run |
+
+Learned example links are cut to `scheme://host/` and summaries to 200 characters,
+so nothing sensitive from a URL is stored. Evidence, snapshots and reports older than
+`evidence_days` (30) are deleted. The newest snapshot is always kept.
+
+### The report
+
+`data/tuning/reports/DATE.md` lists the evidence counted, each gate mistake with the
+judge's verdict and second opinion, the proposed example, rule and dedup changes, the
+regression gate results, what was applied, the judge cost, and clean-up. It ends with
+the exact `--rebuild` and `--rollback` commands for that config.
+
+### Rebuild and rollback
+
+- `--rebuild` rebuilds the live `ad-detector` model from `AdDetectorModelfile` plus the
+  learned files. Run it after any manual edit to the learned files.
+- `--rollback DATE` restores the latest snapshot taken on DATE (learned files and live
+  model) and rebuilds the live model from it.
+
+The tuner builds a `*-candidate` model to test a change and removes it at the end
+of the run. A bare `ollama create` drops learned data, as noted above.
+
 ## Ongoing Workflow
 
 ### When new ads slip through the digest
@@ -75,8 +119,11 @@ Schema per example:
 5. **Rebuild the custom model** with the new examples baked in:
    ```bash
    uv run update_modelfile.py
-   ollama rm ad-detector && ollama create ad-detector -f AdDetectorModelfile
+   uv run newsradar tune --config <config> --rebuild
    ```
+   Do not run a bare `ollama create ad-detector -f AdDetectorModelfile`. It builds
+   from the base Modelfile only and drops everything the daily tuner learned.
+   `--rebuild` builds from the base Modelfile plus the learned data.
 
 6. **Re-run the harness** to confirm improvement:
    ```bash

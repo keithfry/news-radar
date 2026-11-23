@@ -37,7 +37,7 @@
       "title": "Unconventional Business Stories Every Morning with The Hustle",
       "summary": "Subscribe to The Hustle to kickstart your day with bold, bizarre, and brilliant unconventional business stories from oddball startups, daring moonshots, and emerging trends. The newsletter offers 100% fresh content daily (Mon-Fri) and a Sunday deep dive, without ads or recycled headlines. It's free, with access to business-building resources.",
       "source": "thehustle.co",
-      "link": "https://thehustle.co/join?ref=6693394292",
+      "link": "https://thehustle.co/",
       "is_ad": true,
       "ad_type": "newsletter_cta",
       "notes": "Newsletter subscription pitch. Ref link = referral tracking."
@@ -47,7 +47,7 @@
       "title": "Free Guide to 150+ AI Prompts for Solopreneurs and Small Businesses",
       "summary": "A free guide provides 150+ plug-and-play AI prompts for solo entrepreneurs and small businesses, covering topics such as marketing, sales, customer service, automation, and personal growth. The guide offers scripts for outreach, closing deals, chatbot interactions, task management, and more. With these AI-powered tools, users can work smarter, not harder, and scale their business without hiring a team.",
       "source": "offers.hubspot.com",
-      "link": "https://offers.hubspot.com/ai-scale-solo-business?utm_medium=email-media-newsletter&utm_source=the-hustle",
+      "link": "https://offers.hubspot.com/",
       "is_ad": true,
       "ad_type": "lead_gen_offer",
       "notes": "HubSpot lead magnet. UTM params confirm paid placement."
@@ -57,7 +57,7 @@
       "title": "How Real Intent's Intent Data Can Help Real Estate Agents Generate Leads",
       "summary": "Real Intent's intent data can help real estate agents generate leads by providing information on the motivations of potential buyers and sellers, allowing agents to target their marketing efforts more effectively. The data is used to identify motivated buyers and sellers, enabling agents to provide personalized and relevant services.",
       "source": "real-intent.webinargeek.com",
-      "link": "https://real-intent.webinargeek.com/the-ultimate-alternative-to-zillow-s-premier-agent-service-helping-real-estate-agents-leverage-intent-data",
+      "link": "https://real-intent.webinargeek.com/",
       "is_ad": true,
       "ad_type": "subscription_pitch",
       "notes": "Webinar lead-gen for a paid real estate data subscription service."
@@ -67,7 +67,7 @@
       "title": "Refer Friends and Get Rewards with The Hustle Program",
       "summary": "Refer friends to The Hustle by sharing a unique link and earning rewards for each referral. To receive credit, the referred person must subscribe using the link, confirm their subscription through an email confirmation, and click on a link in that email. Prizes are available for purchase outside of the program.",
       "source": "thehustle.co",
-      "link": "https://thehustle.co/refer-the-hustle?_hsenc=p2ANqtz-9921X79U2POafWV5T7kpT3bVowIFyAKWqwJBdTG859hgQym5Kfnn93C0vRIHW2_Ihyd7OAPLHcz4JkJh7Fr008eFlkCw",
+      "link": "https://thehustle.co/",
       "is_ad": true,
       "ad_type": "referral_program",
       "notes": "Classic referral CTA with prize incentives and tracking link."
@@ -77,7 +77,7 @@
       "title": "The Hustle brings you Unconventional Business Stories Every Morning Free",
       "summary": "A newsletter called The Hustle brings unconventional business stories every morning to 1.5 million subscribers, offering a fresh take on the business world without ads or recycled headlines. It aims to provide new ideas and insights with its daily curated roundup of unusual news and trends.",
       "source": "thehustle.co",
-      "link": "https://thehustle.co/join?ref=6693394292",
+      "link": "https://thehustle.co/",
       "is_ad": true,
       "ad_type": "newsletter_cta",
       "notes": "Subscribe pitch with referral link."
@@ -87,7 +87,7 @@
       "title": "How Real Intent Uses Data to Provide Leads for Real Estate Agents",
       "summary": "Real Intent provides leads for real estate agents based on data analysis of internet behavior, allowing agents to identify motivated buyers and sellers. The company uses intent data to help agents generate leads, with strategies including analyzing website traffic, social media engagement, and online search behavior.",
       "source": "real-intent.webinargeek.com",
-      "link": "https://real-intent.webinargeek.com/the-ultimate-alternative-to-zillow-s-premier-agent-service-helping-real-estate-agents-leverage-intent-data",
+      "link": "https://real-intent.webinargeek.com/",
       "is_ad": true,
       "ad_type": "subscription_pitch",
       "notes": "Webinar funnel for paid real estate leads product."
@@ -97,7 +97,7 @@
       "title": "Top-Tier Tech Marketers Advertise in TLDR Newsletter",
       "summary": "Top-tier tech marketers advertise in TLDR's newsletter, reaching over 7 million tech professionals. The newsletters have seen significant results, with $382k in pipeline and a 20.1x ROI, as well as high engagement metrics including 100+ webinar signups and 14k+ site visits per month.",
       "source": "advertise.tldr.tech",
-      "link": "https://advertise.tldr.tech/?utm_source=tldrai&utm_medium=newsletter&utm_campaign=advertisetopnav",
+      "link": "https://advertise.tldr.tech/",
       "is_ad": true,
       "ad_type": "sponsor_content",
       "notes": "Direct pitch to buy newsletter ad slots. ROI stats = conversion framing."
@@ -107,7 +107,7 @@
       "title": "Elite Real Estate Agent Program for Top Producers Only",
       "summary": "Only one agent per city is selected for the Elite Real Estate Agent Program, which guarantees a monthly seller pipeline and cash-offer-ready buyer opportunities backed by an institutional buyer. To be approved, agents must be verified producers with at least 15 closings in the last 12 months.",
       "source": "elite.homevaluepros.com",
-      "link": "https://elite.homevaluepros.com/apply-now?utm_source=blog.realintent.co",
+      "link": "https://elite.homevaluepros.com/",
       "is_ad": true,
       "ad_type": "subscription_pitch",
       "notes": "Exclusivity and scarcity marketing for paid subscription product."
@@ -117,7 +117,7 @@
       "title": "Exclusive Real Estate Agent Program for Proven Performers Only",
       "summary": "One agent is selected to manage the seller pipeline in each city, ensuring exclusive access to cash-offer-ready opportunities backed by an institutional buyer. Verified producers with 15+ closings in the last 12 months and active licenses are considered for approval.",
       "source": "elite.homevaluepros.com",
-      "link": "https://elite.homevaluepros.com/apply-now?utm_source=blog.realintent.co",
+      "link": "https://elite.homevaluepros.com/",
       "is_ad": true,
       "ad_type": "subscription_pitch",
       "notes": "Same product as elite-real-estate-program — duplicate ad from same source."
@@ -127,7 +127,7 @@
       "title": "Exclusive Agent Program for Major U.S. REIT Buyers",
       "summary": "Agents are selected through a verification process, which includes checking for at least 15 closings in the last 12 months and having an active license with no disciplinary history. To be approved, agents must also have a brokerage affiliation and two deal references on request.",
       "source": "link.mail.beehiiv.com",
-      "link": "https://link.mail.beehiiv.com/ss/c/u001.tz3RRG_bIZSfswwVnomzzQ",
+      "link": "https://link.mail.beehiiv.com/",
       "is_ad": true,
       "ad_type": "subscription_pitch",
       "notes": "Third variation of the Real Intent real estate ad. Different framing, same product."
@@ -137,7 +137,7 @@
       "title": "Elite Real Estate Agents Get Exclusive Cash-Offer Ready Seller Opportunities",
       "summary": "Elite real estate agents can apply to receive exclusive cash-offer-ready seller opportunities, available one agent per city, backed by an institutional buyer. To be eligible, producers must have at least 15 closings in the last 12 months and no disciplinary history.",
       "source": "link.mail.beehiiv.com",
-      "link": "https://link.mail.beehiiv.com/ss/c/u001.tz3RRG_bIZSfswwVnomzzQ",
+      "link": "https://link.mail.beehiiv.com/",
       "is_ad": true,
       "ad_type": "subscription_pitch",
       "notes": "Fourth variation of same real estate subscription product."
@@ -147,7 +147,7 @@
       "title": "How Real Intent's Intent Data Can Help Real Estate Agents Find Motivated Buyers and Sellers",
       "summary": "Real Intent's intent data provides valuable insights for real estate agents, helping them find motivated buyers and sellers. The company collects and analyzes online search behavior and browsing patterns to identify potential leads.",
       "source": "real-intent.webinargeek.com",
-      "link": "https://real-intent.webinargeek.com/the-ultimate-alternative-to-zillow-s-premier-agent-service-helping-real-estate-agents-leverage-intent-data",
+      "link": "https://real-intent.webinargeek.com/",
       "is_ad": true,
       "ad_type": "subscription_pitch",
       "notes": "Fifth variation of the same Real Intent webinar/product funnel."
@@ -177,7 +177,7 @@
       "title": "Asset Studio is entering a new era of AI-powered creativity.",
       "summary": "Google Ads is introducing new multimodal capabilities in its Asset Studio, enhancing the platform's AI-powered creativity features.",
       "source": "Google / Google AI (Keyword Blog)",
-      "link": "https://blog.google/products/ads-commerce/asset-studio-updates/",
+      "link": "https://blog.google/",
       "is_ad": false,
       "ad_type": "not_ad",
       "notes": "Product announcement from Google's official blog. Informational, no CTA to buy."
@@ -187,7 +187,7 @@
       "title": "Flurry of Deals Reaffirms Sizzling AI Market",
       "summary": "A flurry of deals has reaffirmed the sizzling AI market, involving some of the most prominent brands in generative AI.",
       "source": "AI Business",
-      "link": "https://aibusiness.com/generative-ai/flurry-of-deals-reaffirms-sizzling-ai-market",
+      "link": "https://aibusiness.com/",
       "is_ad": false,
       "ad_type": "not_ad",
       "notes": "Third-party journalism. Market coverage."
@@ -197,7 +197,7 @@
       "title": "OpenAI GPT-5.6 Solves 80-Year-Old Erdős Planar Unit Distance Problem",
       "summary": "OpenAI's GPT-5.6 model solved the 80-year-old Erdős planar unit distance problem for under $1000, disproving a long-standing belief in discrete geometry, with validation from mathematicians and researchers.",
       "source": "latent.space",
-      "link": "https://www.latent.space/p/ainews-openai-gpt-next-disproves",
+      "link": "https://www.latent.space/",
       "is_ad": false,
       "ad_type": "not_ad",
       "notes": "Research news. Specific technical achievement reported by third party."
@@ -207,7 +207,7 @@
       "title": "Andrej Karpathy Joins Anthropic: What Happens Next",
       "summary": "Andrej Karpathy, a prominent figure in AI research and founder of Oraetx, has joined Anthropic, a leading artificial intelligence company. In his new role, Karpathy will focus on developing AI capabilities that can be used to benefit humanity.",
       "source": "The Algorithmic Bridge",
-      "link": "https://www.thealgorithmicbridge.com/p/andrej-karpathy-joins-anthropic-what",
+      "link": "https://www.thealgorithmicbridge.com/",
       "is_ad": false,
       "ad_type": "not_ad",
       "notes": "Industry news. Third-party analysis of a hiring announcement."
@@ -217,7 +217,7 @@
       "title": "Everything new in our Google AI subscriptions, fresh from I/O 2026",
       "summary": "Google has announced new features for its AI subscriptions at I/O 2026. The updated plans come with additional perks, all while maintaining the existing pricing.",
       "source": "Google / Google AI (Keyword Blog)",
-      "link": "https://blog.google/products-and-platforms/products/google-one/google-ai-subscriptions/",
+      "link": "https://blog.google/",
       "is_ad": false,
       "ad_type": "not_ad",
       "notes": "Product announcement blog. Borderline — from Google's own blog, but a factual announcement with no direct purchase CTA."
@@ -227,7 +227,7 @@
       "title": "Every AI Agent Needs Access to a Computer Architecturally",
       "summary": "Agentic sandboxes refer to virtual environments designed to test and refine autonomous decision-making in AI systems without harming humans or the environment. These sandboxes allow developers to simulate real-world scenarios, making it possible to train and validate AI agents.",
       "source": "The Sequence",
-      "link": "https://thesequence.substack.com/p/the-sequence-opinion-864-every-ai",
+      "link": "https://thesequence.substack.com/",
       "is_ad": false,
       "ad_type": "not_ad",
       "notes": "RSS version of same opinion article. Technical analysis."
@@ -247,7 +247,7 @@
       "title": "Play Points members and comic book fans can score exclusive rewards with Google Play",
       "summary": "Play Points members, including comic book fans, can score exclusive rewards such as point boosters and limited-edition gear through the Google Play app or by visiting The Auction by Google Play in San Diego from July 23 to 25. Gold members can unlock digital reward cases for points and collectibles, while all members can redeem points for unique gaming gear. Members also receive priority entry, bonus tokens, and exclusive rewards when they visit the event in person.",
       "source": "Google / Google AI (Keyword Blog)",
-      "link": "https://blog.google/products-and-platforms/platforms/google-play/comic-con-san-diego/",
+      "link": "https://blog.google/",
       "is_ad": true,
       "ad_type": "product_feature_disguised",
       "notes": "Loyalty-program promo dressed as blog content. Rewards/points CTA, event promo, no AI relevance — slipped through gate on 2026-07-24 AI radar."
@@ -257,7 +257,7 @@
       "title": "At AI Summit, South Korea Outlines Its AI Future With NVIDIA and Partners",
       "summary": "South Korean President Jae Myung Lee and business leaders are meeting with NVIDIA and ecosystem partners to chart Korea's AI progress. A joint AI research lab was announced between NVIDIA and KAIST, focused on advancing agentic AI for South Korea. The collaboration will bring together NVIDIA expertise and KAIST scientific talent.",
       "source": "NVIDIA Blog",
-      "link": "https://blogs.nvidia.com/blog/ai-summit-korea-partners-and-nvidia/",
+      "link": "https://blogs.nvidia.com/",
       "is_ad": false,
       "ad_type": "not_ad",
       "notes": "Real news item from same digest run, adjacent card to the Play Points ad. Balances the new ad example."
