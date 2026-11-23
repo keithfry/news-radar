@@ -67,3 +67,11 @@ def test_domain_only():
     assert domain_only("https://thehustle.co/join?ref=6693394292") == "https://thehustle.co/"
     assert domain_only("") == ""
     assert domain_only("not a url") == ""
+
+
+def test_domain_only_drops_port_and_never_raises():
+    assert domain_only("http://host:8080/path?x=1") == "http://host/"
+    assert domain_only("http://host:abc/") == "http://host/"
+    assert domain_only("http://[::1]:8080/a") == "http://[::1]/"
+    assert domain_only("http://[::1/") == ""
+    assert domain_only(None) == ""

@@ -13,16 +13,16 @@ _DEDUP_HEADING = "LEARNED EXAMPLES (past mistakes to avoid):"
 
 
 def domain_only(url: str) -> str:
-    """Cut a link to scheme://host/, or return "" when it has no scheme and host."""
+    """Cut a link to scheme://host/ with no port. Returns "" for anything else; never raises."""
     try:
         parts = urlparse((url or "").strip())
-    except ValueError:
+        host = parts.hostname
+    except (ValueError, TypeError, AttributeError):
         return ""
-    if not parts.scheme or not parts.hostname:
+    if not parts.scheme or not host:
         return ""
-    host = parts.hostname
-    if parts.port:
-        host = f"{host}:{parts.port}"
+    if ":" in host:  # IPv6 literal
+        host = f"[{host}]"
     return f"{parts.scheme}://{host}/"
 
 
