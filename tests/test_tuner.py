@@ -73,6 +73,7 @@ class Fakes:
     def __init__(self):
         self.judge_error: Exception | None = None
         self.judged: list[AdRecord] = []
+        self.unjudged_keys: set[str] = set()  # records the judge returns no verdict for
         self.mistakes = {"k_fp_aaaaaaaa": (False, True)}  # key -> (correct is_ad, visible)
         self.rules: list[ProposedRule] = []
         self.dedup_cases: list[DedupCase] = []
@@ -109,6 +110,8 @@ class Fakes:
         self.judged = list(records)
         verdicts = []
         for r in records:
+            if r.key in self.unjudged_keys:
+                continue
             gate_ad = r.verdict == "ad"
             if r.key in self.mistakes:
                 is_ad, visible = self.mistakes[r.key]
@@ -121,7 +124,8 @@ class Fakes:
                               ad_type="sponsor_content" if gate_ad else "not_ad",
                               reason="judge agrees", visible_in_excerpt=True, example=None)
             verdicts.append(v)
-        return AdJudgement(verdicts=verdicts, proposed_rules=list(self.rules), cost_usd=0.25)
+        return AdJudgement(verdicts=verdicts, proposed_rules=list(self.rules), cost_usd=0.25,
+                           skipped=len(records) - len(verdicts))
 
     def judge_dedup(self, records, tuning):
         return list(self.dedup_cases), 0.5, 2
@@ -202,6 +206,24 @@ def test_judge_failure_applies_nothing_and_reports(cfg, evidence, fakes):
     out = run_tune(cfg, DATE, log=lambda s: None)
     assert not out.ads_applied and "rate limited" in out.report_path.read_text()
     assert store(cfg).ad_examples() == []
+
+
+def test_judge_failure_report_keeps_the_cost_of_calls_made(cfg, evidence, fakes):
+    fakes.judge_error = JudgeError("ad batch 1 of 1: no usable verdict for 3 of 3 records", cost_usd=0.42)
+    text = run_tune(cfg, DATE, log=lambda s: None).report_path.read_text()
+    assert "no usable verdict" in text and "Judge cost: $0.42" in text
+
+
+def test_unjudged_record_is_counted_and_gets_no_case(cfg, evidence, fakes, monkeypatch):
+    fakes.unjudged_keys = {"k_ad_aaaaaaaa"}
+    fakes.candidate_fixes_today_mistake()
+    seen: list[str] = []
+    real_predict = tuner.predict_ads
+    monkeypatch.setattr(tuner, "predict_ads", lambda model, cases: seen.extend(c.id for c in cases)
+                        or real_predict(model, cases))
+    text = run_tune(cfg, DATE, log=lambda s: None).report_path.read_text()
+    assert "Records skipped: 1" in text and "Ad-gate decisions judged: 2." in text
+    assert "today:k_ad_aaa" not in seen and "today:k_fp_aaa" in seen
 
 
 def test_accepted_change_snapshots_then_saves_and_rebuilds(cfg, evidence, fakes):

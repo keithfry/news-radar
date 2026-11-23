@@ -57,7 +57,7 @@ These are real items the gate saw. Use them to calibrate.
 
 Each record is one item and the gate's decision on it:
 
-- `key`: the record's id. Copy it exactly into your verdict.
+- `id`: the record's id in this batch, such as `r0`. Put the same id in your verdict.
 - `title`, `source`, `source_type` (`email` for a newsletter email, `feed` for an RSS item, `linked_article` for a web page linked from a newsletter), `link`.
 - `verdict`: what the gate decided, `ad` (removed) or `not_ad` (kept). `reason` is the gate's own explanation.
 - `text_sent`: exactly the text the gate saw, the first 1,000 characters of the item.
@@ -67,7 +67,7 @@ Base your label on the whole item as `text_full` shows it, not only on the openi
 
 ## What to return for each record
 
-Return exactly one verdict per record, with its `key`.
+Return exactly one verdict per record, with its `id`. Don't skip a record and don't repeat an id.
 
 - `is_ad`: the correct label for the item.
 - `ad_type`: one of the types above. It must be `not_ad` exactly when `is_ad` is false.

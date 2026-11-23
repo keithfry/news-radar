@@ -29,13 +29,14 @@ EX = {"title": "T", "summary": "S", "source": "The AI Report", "link": "https://
 class FakeClaude:
     def __init__(self):
         self.calls: list[dict] = []
-        self.reply = lambda prompt: {"verdicts": [verdict(k) for k in keys_in(prompt)], "proposed_rules": []}
+        self.reply = lambda prompt: {"verdicts": [verdict(i) for i in ids_in(prompt)], "proposed_rules": []}
         self.error: Exception | None = None
+        self.error_on_call: int | None = None  # 1-based; None raises self.error on every call
         self.cost = 0.0
 
     def __call__(self, prompt, model, **kwargs):
         self.calls.append({"prompt": prompt, "model": model, **kwargs})
-        if self.error:
+        if self.error and self.error_on_call in (None, len(self.calls)):
             raise self.error
         return ClaudeResult(text="", structured=self.reply(prompt), usage={}, cost_usd=self.cost)
 
@@ -53,15 +54,19 @@ def rec(key, verdict="not_ad", reason="r", source="The AI Report", title="Title"
                     verdict=verdict, reason=reason, model="ad-detector")
 
 
-def verdict(key, correct=True, example=None, gate_said_ad=False):
+def verdict(id, correct=True, example=None, gate_said_ad=False):
     is_ad = gate_said_ad if correct else not gate_said_ad
-    return {"key": key, "correct": correct, "is_ad": is_ad,
+    return {"id": id, "correct": correct, "is_ad": is_ad,
             "ad_type": "sponsor_content" if is_ad else "not_ad", "reason": "why",
             "visible_in_excerpt": True, "example": example}
 
 
-def keys_in(prompt):
-    return re.findall(r'"key": "([^"]+)"', prompt)
+def ids_in(prompt):
+    return re.findall(r'"id": "(r\d+)"', prompt)
+
+
+def reply_for(*verdicts, rules=()):
+    return lambda p: {"verdicts": list(verdicts), "proposed_rules": list(rules)}
 
 
 def drec(titles, dropped, key="d1"):
@@ -82,33 +87,70 @@ def test_judge_ads_calls_isolated_opus_medium_with_schema(fake_claude):
 
 
 def test_judge_ads_batches_and_maps_verdicts_by_key(fake_claude):
-    fake_claude.reply = lambda prompt: {"verdicts": [verdict(k) for k in keys_in(prompt)], "proposed_rules": []}
     out = judge_ads([rec(f"k{i}") for i in range(45)], TUNING, batch_size=20)
     assert len(fake_claude.calls) == 3 and [v.key for v in out.verdicts] == [f"k{i}" for i in range(45)]
+    assert out.skipped == 0
+
+
+def test_prompt_uses_short_ids_not_evidence_keys(fake_claude):
+    long_keys = ["7dbd9bae90ac9abd2990bade4fef5cd9fe47dc62", "f03b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b"]
+    out = judge_ads([rec(k) for k in long_keys], TUNING)
+    prompt = fake_claude.calls[0]["prompt"]
+    assert ids_in(prompt) == ["r0", "r1"] and long_keys[0] not in prompt
+    assert [v.key for v in out.verdicts] == long_keys
+
+
+def test_ids_restart_in_each_batch_and_map_back(fake_claude):
+    fake_claude.reply = lambda p: {"verdicts": [verdict(i, gate_said_ad=True) for i in ids_in(p)],
+                                   "proposed_rules": []}
+    out = judge_ads([rec("a", verdict="ad"), rec("b", verdict="ad"), rec("c", verdict="ad")], TUNING,
+                    batch_size=2)
+    assert [ids_in(c["prompt"]) for c in fake_claude.calls] == [["r0", "r1"], ["r0"]]
+    assert [v.key for v in out.verdicts] == ["a", "b", "c"]
 
 
 def test_verdicts_follow_record_order_not_reply_order(fake_claude):
-    fake_claude.reply = lambda p: {"verdicts": [verdict(k) for k in reversed(keys_in(p))], "proposed_rules": []}
+    fake_claude.reply = lambda p: {"verdicts": [verdict(i) for i in reversed(ids_in(p))], "proposed_rules": []}
     out = judge_ads([rec("a"), rec("b"), rec("c")], TUNING)
     assert [v.key for v in out.verdicts] == ["a", "b", "c"]
 
 
-def test_missing_key_raises_judge_error(fake_claude):
-    fake_claude.reply = lambda prompt: {"verdicts": [], "proposed_rules": []}
-    with pytest.raises(JudgeError, match="k1"):
-        judge_ads([rec("k1")], TUNING)
+def test_missing_verdict_is_skipped_and_counted(fake_claude):
+    fake_claude.reply = reply_for(verdict("r0"), verdict("r2"))
+    out = judge_ads([rec("a"), rec("b"), rec("c")], TUNING)
+    assert [v.key for v in out.verdicts] == ["a", "c"] and out.skipped == 1
 
 
-@pytest.mark.parametrize("extra", ["k1", "stranger"])
-def test_duplicate_or_unknown_key_raises(fake_claude, extra):
-    fake_claude.reply = lambda p: {"verdicts": [verdict("k1"), verdict(extra)], "proposed_rules": []}
-    with pytest.raises(JudgeError, match="k1"):
-        judge_ads([rec("k1")], TUNING)
+def test_unknown_and_repeated_ids_are_skipped(fake_claude):
+    # r0 twice: that record is skipped. r9 doesn't exist: ignored.
+    fake_claude.reply = reply_for(verdict("r0"), verdict("r0"), verdict("r1"), verdict("r2"), verdict("r9"))
+    out = judge_ads([rec("a"), rec("b"), rec("c")], TUNING)
+    assert [v.key for v in out.verdicts] == ["b", "c"] and out.skipped == 1
+
+
+def test_exactly_half_missing_is_still_judged(fake_claude):
+    fake_claude.reply = reply_for(verdict("r0"), verdict("r1"))
+    out = judge_ads([rec(f"k{i}") for i in range(4)], TUNING)
+    assert len(out.verdicts) == 2 and out.skipped == 2
+
+
+def test_more_than_half_missing_raises_short_error(fake_claude):
+    long_keys = [f"{i}" * 40 for i in range(3)]
+    fake_claude.reply = reply_for(verdict("r0"))
+    with pytest.raises(JudgeError, match="ad batch 1 of 1") as exc:
+        judge_ads([rec(k) for k in long_keys], TUNING)
+    assert "2 of 3" in str(exc.value) and not any(k in str(exc.value) for k in long_keys)
+
+
+def test_skipped_counts_add_across_batches(fake_claude):
+    fake_claude.reply = lambda p: {"verdicts": [verdict(i) for i in ids_in(p)[1:]], "proposed_rules": []}
+    out = judge_ads([rec(f"k{i}") for i in range(6)], TUNING, batch_size=3)
+    assert out.skipped == 2 and [v.key for v in out.verdicts] == ["k1", "k2", "k4", "k5"]
 
 
 def test_correct_flag_must_agree_with_label(fake_claude):
     # The gate kept the item (not_ad); the judge says it is an ad yet calls the verdict correct.
-    bad = {**verdict("k1"), "is_ad": True, "ad_type": "sponsor_content"}
+    bad = {**verdict("r0"), "is_ad": True, "ad_type": "sponsor_content"}
     fake_claude.reply = lambda p: {"verdicts": [bad], "proposed_rules": []}
     with pytest.raises(JudgeError, match="k1"):
         judge_ads([rec("k1")], TUNING)
@@ -116,32 +158,32 @@ def test_correct_flag_must_agree_with_label(fake_claude):
 
 @pytest.mark.parametrize("is_ad,ad_type", [(True, "not_ad"), (False, "sponsor_content"), (False, "made_up")])
 def test_ad_type_must_agree_with_label(fake_claude, is_ad, ad_type):
-    bad = {**verdict("k1", correct=not is_ad), "is_ad": is_ad, "ad_type": ad_type}
+    bad = {**verdict("r0", correct=not is_ad), "is_ad": is_ad, "ad_type": ad_type}
     fake_claude.reply = lambda p: {"verdicts": [bad], "proposed_rules": []}
     with pytest.raises(JudgeError):
         judge_ads([rec("k1")], TUNING)
 
 
 def test_mistake_without_example_raises(fake_claude):
-    fake_claude.reply = lambda p: {"verdicts": [verdict("k1", correct=False, example=None)], "proposed_rules": []}
+    fake_claude.reply = lambda p: {"verdicts": [verdict("r0", correct=False, example=None)], "proposed_rules": []}
     with pytest.raises(JudgeError, match="example"):
         judge_ads([rec("k1")], TUNING)
 
 
 def test_correct_verdict_drops_any_example(fake_claude):
-    fake_claude.reply = lambda p: {"verdicts": [verdict("k1", example=EX)], "proposed_rules": []}
+    fake_claude.reply = lambda p: {"verdicts": [verdict("r0", example=EX)], "proposed_rules": []}
     assert judge_ads([rec("k1")], TUNING).verdicts[0].example is None
 
 
 def test_example_summary_capped_and_link_cut_to_domain(fake_claude):
-    fake_claude.reply = lambda p: {"verdicts": [verdict("k1", correct=False, example={**EX, "summary": "x" * 300,
+    fake_claude.reply = lambda p: {"verdicts": [verdict("r0", correct=False, example={**EX, "summary": "x" * 300,
                                    "link": "https://a.com/p?ref=1"})], "proposed_rules": []}
     ex = judge_ads([rec("k1")], TUNING).verdicts[0].example
     assert len(ex["summary"]) == 200 and ex["link"] == "https://a.com/"
 
 
 def test_example_gets_stable_id_and_label_from_verdict(fake_claude):
-    fake_claude.reply = lambda p: {"verdicts": [verdict("abcdef123456", correct=False, example=EX)],
+    fake_claude.reply = lambda p: {"verdicts": [verdict("r0", correct=False, example=EX)],
                                    "proposed_rules": []}
     ex = judge_ads([rec("abcdef123456", source="The AI Report")], TUNING).verdicts[0].example
     assert ex["id"] == "the-ai-report-2026-11-23-abcdef12"
@@ -150,22 +192,22 @@ def test_example_gets_stable_id_and_label_from_verdict(fake_claude):
 
 
 def test_prompt_carries_both_texts_and_gate_verdict(fake_claude):
-    fake_claude.reply = lambda p: {"verdicts": [verdict("k1", gate_said_ad=True)], "proposed_rules": []}
+    fake_claude.reply = lambda p: {"verdicts": [verdict("r0", gate_said_ad=True)], "proposed_rules": []}
     judge_ads([rec("k1", verdict="ad", reason="GATE-REASON", text_sent="EXCERPT-1000", text_full="LONGER-4000")],
               TUNING)
     prompt = fake_claude.calls[0]["prompt"]
     payload = json.loads(prompt[prompt.index("["):prompt.rindex("]") + 1])
-    assert payload[0]["key"] == "k1" and payload[0]["verdict"] == "ad" and payload[0]["reason"] == "GATE-REASON"
+    assert payload[0]["id"] == "r0" and "key" not in payload[0] and payload[0]["verdict"] == "ad" and payload[0]["reason"] == "GATE-REASON"
     assert payload[0]["text_sent"] == "EXCERPT-1000" and payload[0]["text_full"] == "LONGER-4000"
 
 
 def test_proposed_rules_parsed_and_leaning_checked(fake_claude):
-    fake_claude.reply = lambda p: {"verdicts": [verdict(k) for k in keys_in(p)],
+    fake_claude.reply = lambda p: {"verdicts": [verdict(i) for i in ids_in(p)],
                                    "proposed_rules": [{"text": "Keep paywalled news.", "leaning": "keep"}]}
     out = judge_ads([rec("k1")], TUNING)
     assert out.proposed_rules == [ProposedRule(text="Keep paywalled news.", leaning="keep")]
 
-    fake_claude.reply = lambda p: {"verdicts": [verdict(k) for k in keys_in(p)],
+    fake_claude.reply = lambda p: {"verdicts": [verdict(i) for i in ids_in(p)],
                                    "proposed_rules": [{"text": "x", "leaning": "sideways"}]}
     with pytest.raises(JudgeError):
         judge_ads([rec("k1")], TUNING)
@@ -185,8 +227,47 @@ def test_claude_failure_becomes_judge_error(fake_claude):
 
 def test_missing_structured_output_becomes_judge_error(fake_claude):
     fake_claude.reply = lambda p: None
-    with pytest.raises(JudgeError, match="k1"):
+    with pytest.raises(JudgeError, match="ad batch 1 of 1"):
         judge_ads([rec("k1")], TUNING)
+
+
+def test_cost_is_kept_when_a_later_batch_fails(fake_claude):
+    fake_claude.cost = 0.3
+    replies = iter([{"verdicts": [verdict("r0")], "proposed_rules": []}, {"verdicts": [], "proposed_rules": []}])
+    fake_claude.reply = lambda p: next(replies)
+    with pytest.raises(JudgeError) as exc:
+        judge_ads([rec("a"), rec("b")], TUNING, batch_size=1)
+    assert exc.value.cost_usd == pytest.approx(0.6)
+
+
+def test_cost_is_kept_when_the_reply_has_no_structured_output(fake_claude):
+    fake_claude.cost = 0.2
+    fake_claude.reply = lambda p: None
+    with pytest.raises(JudgeError) as exc:
+        judge_ads([rec("a")], TUNING)
+    assert exc.value.cost_usd == pytest.approx(0.2)
+
+
+def test_failed_cli_call_carries_earlier_cost(fake_claude):
+    fake_claude.cost = 0.1
+    fake_claude.reply = lambda p: {"cases": []}
+    fake_claude.error, fake_claude.error_on_call = ClaudeCallError("rate limited"), 2
+    with pytest.raises(JudgeError) as exc:
+        judge_dedup([drec(TITLES, [], key="a"), drec(TITLES, [], key="b")], TUNING)
+    assert exc.value.cost_usd == pytest.approx(0.1)
+
+
+@pytest.mark.parametrize("call", ["ad", "dedup"])
+def test_second_opinion_bad_reply_keeps_cost(fake_claude, call):
+    fake_claude.cost = 0.05
+    fake_claude.reply = lambda p: {"is_ad": True, "ad_type": "not_ad", "reason": "x", "groups": [[0, 9]]}
+    with pytest.raises(JudgeError) as exc:
+        if call == "ad":
+            second_opinion_ad(rec("k1"), TUNING)
+        else:
+            second_opinion_dedup(DedupCase(titles=["A", "B"], expected_groups=[[0, 1]],
+                                           kind="missed_duplicate", note=""), TUNING)
+    assert exc.value.cost_usd == pytest.approx(0.05)
 
 
 def test_no_records_makes_no_call(fake_claude):
@@ -363,10 +444,11 @@ def test_second_opinion_rule_caps_items(fake_claude):
     assert "News 19" in prompt and "News 20" not in prompt
 
 
-def test_second_opinion_rule_bad_id_raises(fake_claude):
-    fake_claude.reply = lambda p: {"sound": True, "would_remove": [5], "reason": "x"}
-    with pytest.raises(JudgeError):
-        second_opinion_rule(RULE, [rec("k1")], TUNING)
+@pytest.mark.parametrize("would_remove", [[5], [-1], ["0"], [True]])
+def test_second_opinion_rule_bad_id_rejects_the_rule_without_raising(fake_claude, would_remove):
+    fake_claude.cost = 0.04
+    fake_claude.reply = lambda p: {"sound": True, "would_remove": would_remove, "reason": "x"}
+    assert second_opinion_rule(RULE, [rec("k1")], TUNING) == (False, 0.04)
 
 
 # ---------- prompts ----------

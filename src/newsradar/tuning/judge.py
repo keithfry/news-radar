@@ -1,14 +1,18 @@
 """The Opus judge: reviews the ad gate's and the dedup check's decisions.
 
 The judge returns data only. Every reply is checked against the batch it
-answers, and any failed call or bad reply raises JudgeError, so the tuner
-applies nothing from a run it can't trust.
+answers. A failed call or a broken reply raises JudgeError, so the tuner
+applies nothing from a run it can't trust. A record the judge skipped or
+named with a wrong id is left unjudged and counted. JudgeError carries the
+cost of every call made before the failure.
 """
 
 from __future__ import annotations
 
 import json
 import re
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from importlib import resources
 
@@ -27,7 +31,14 @@ CASE_KINDS = ["wrong_merge", "missed_duplicate"]
 
 
 class JudgeError(RuntimeError):
-    """A judge call failed, or its reply doesn't fit the batch it answers."""
+    """A judge call failed, or its reply doesn't fit the batch it answers.
+
+    cost_usd is what the calls made before the failure cost, including a call
+    whose reply then failed the checks."""
+
+    def __init__(self, message: str, cost_usd: float = 0.0):
+        super().__init__(message)
+        self.cost_usd = cost_usd
 
 
 @dataclass
@@ -52,6 +63,7 @@ class AdJudgement:
     verdicts: list[AdVerdict]
     proposed_rules: list[ProposedRule]
     cost_usd: float
+    skipped: int = 0  # records left unjudged: no verdict, or their id was repeated
 
 
 @dataclass
@@ -78,7 +90,7 @@ _EXAMPLE_SCHEMA = _obj({"title": _STR, "summary": _STR, "source": _STR, "link": 
 
 AD_SCHEMA = _obj({
     "verdicts": {"type": "array", "items": _obj({
-        "key": _STR,
+        "id": _STR,
         "correct": _BOOL,
         "is_ad": _BOOL,
         "ad_type": _AD_TYPE,
@@ -114,24 +126,45 @@ def _prompt(name: str) -> str:
     return resources.files("newsradar.tuning").joinpath("prompts", name).read_text(encoding="utf-8")
 
 
-def _call(prompt: str, system_file: str, schema: dict, tuning: TuningConfig, what: str) -> tuple[dict, float]:
+class _Meter:
+    """Running cost of one public call, so a JudgeError can report it."""
+
+    def __init__(self):
+        self.cost = 0.0
+
+
+@contextmanager
+def _metered() -> Iterator[_Meter]:
+    meter = _Meter()
+    try:
+        yield meter
+    except JudgeError as exc:
+        exc.cost_usd += meter.cost
+        raise
+
+
+def _call(prompt: str, system_file: str, schema: dict, tuning: TuningConfig, what: str,
+          meter: _Meter) -> dict:
+    """One judge call. Its cost goes into meter before the reply is checked."""
     try:
         result = run_claude(prompt, tuning.judge_model, system_prompt=_prompt(system_file),
                             json_schema=schema, effort=tuning.judge_effort)
     except ClaudeCallError as exc:
         raise JudgeError(f"{what}: {exc}") from exc
+    meter.cost += result.cost_usd
     if not isinstance(result.structured, dict):
         raise JudgeError(f"{what}: reply had no structured output")
-    return result.structured, result.cost_usd
+    return result.structured
 
 
 def _slug(text: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", text.casefold()).strip("-") or "item"
 
 
-def _record_json(record: AdRecord, with_verdict: bool) -> dict:
-    out = {"key": record.key, "title": record.title, "source": record.source,
-           "source_type": record.source_type, "link": record.link}
+def _record_json(record: AdRecord, with_verdict: bool, id: str | None = None) -> dict:
+    out = {"id": id} if id is not None else {}
+    out |= {"title": record.title, "source": record.source,
+            "source_type": record.source_type, "link": record.link}
     if with_verdict:
         out["verdict"] = record.verdict
         out["reason"] = record.reason
@@ -178,70 +211,83 @@ def _make_example(record: AdRecord, verdict: AdVerdict, raw: dict) -> dict:
     }
 
 
-def _parse_ad_batch(batch: list[AdRecord], reply: dict, what: str) -> tuple[list[AdVerdict], list[ProposedRule]]:
-    by_key = {r.key: r for r in batch}
+def _parse_ad_batch(batch: list[AdRecord], reply: dict,
+                    what: str) -> tuple[list[AdVerdict], list[ProposedRule], int]:
+    """Map a reply's r0..rN ids back to the batch. Returns (verdicts in batch
+    order, rules, records skipped). A record with no verdict or a repeated id is
+    skipped; a verdict with an unknown id is ignored."""
+    by_id = {f"r{i}": r for i, r in enumerate(batch)}
     raw_verdicts = reply.get("verdicts")
     if not isinstance(raw_verdicts, list):
         raise JudgeError(f"{what}: reply has no verdicts list")
-    found: dict[str, AdVerdict] = {}
+    grouped: dict[str, list[dict]] = {}
     for raw in raw_verdicts:
-        key = raw.get("key") if isinstance(raw, dict) else None
-        if key not in by_key:
-            raise JudgeError(f"{what}: verdict for unknown key {key!r}")
-        if key in found:
-            raise JudgeError(f"{what}: more than one verdict for key {key}")
-        record = by_key[key]
-        _check_label(raw.get("is_ad"), raw.get("ad_type"), f"{what}, key {key}")
+        rid = raw.get("id") if isinstance(raw, dict) else None
+        if isinstance(rid, str) and rid in by_id:
+            grouped.setdefault(rid, []).append(raw)
+
+    found: dict[str, AdVerdict] = {}
+    for rid, raws in grouped.items():
+        if len(raws) > 1:
+            continue
+        raw, record = raws[0], by_id[rid]
+        where = f"{what}, record {rid} ({record.key[:8]})"
+        _check_label(raw.get("is_ad"), raw.get("ad_type"), where)
         correct = raw.get("correct")
         if correct is not ((record.verdict == "ad") == raw["is_ad"]):
-            raise JudgeError(f"{what}, key {key}: correct={correct!r} contradicts is_ad={raw['is_ad']} "
+            raise JudgeError(f"{where}: correct={correct!r} contradicts is_ad={raw['is_ad']} "
                              f"for gate verdict {record.verdict!r}")
-        v = AdVerdict(key=key, correct=correct, is_ad=raw["is_ad"], ad_type=raw["ad_type"],
+        v = AdVerdict(key=record.key, correct=correct, is_ad=raw["is_ad"], ad_type=raw["ad_type"],
                       reason=str(raw.get("reason") or ""),
                       visible_in_excerpt=bool(raw.get("visible_in_excerpt")), example=None)
         if not correct:
             if not isinstance(raw.get("example"), dict):
-                raise JudgeError(f"{what}, key {key}: mistake has no example")
+                raise JudgeError(f"{where}: mistake has no example")
             v.example = _make_example(record, v, raw["example"])
-        found[key] = v
-    missing = [k for k in by_key if k not in found]
-    if missing:
-        raise JudgeError(f"{what}: no verdict for keys {', '.join(missing)}")
+        found[rid] = v
+
+    skipped = len(batch) - len(found)
+    if skipped * 2 > len(batch):
+        raise JudgeError(f"{what}: no usable verdict for {skipped} of {len(batch)} records")
 
     rules: list[ProposedRule] = []
     for raw in reply.get("proposed_rules") or []:
         if not isinstance(raw, dict) or raw.get("leaning") not in LEANINGS or not str(raw.get("text") or "").strip():
             raise JudgeError(f"{what}: bad proposed rule {raw!r}")
         rules.append(ProposedRule(text=str(raw["text"]).strip(), leaning=raw["leaning"]))
-    return [found[r.key] for r in batch], rules
+    return [found[rid] for rid in by_id if rid in found], rules, skipped
 
 
 def judge_ads(records: list[AdRecord], tuning: TuningConfig, batch_size: int = 20) -> AdJudgement:
     verdicts: list[AdVerdict] = []
     rules: list[ProposedRule] = []
-    cost = 0.0
-    for start in range(0, len(records), batch_size):
-        batch = records[start:start + batch_size]
-        what = f"ad batch (keys {', '.join(r.key for r in batch)})"
-        payload = json.dumps([_record_json(r, with_verdict=True) for r in batch], indent=2, ensure_ascii=False)
-        prompt = (f"Review these {len(batch)} ad-gate decisions. Return exactly one verdict per record, "
-                  f"using its key.\n\nRecords:\n{payload}\n")
-        reply, call_cost = _call(prompt, "judge_ads.md", AD_SCHEMA, tuning, what)
-        cost += call_cost
-        batch_verdicts, batch_rules = _parse_ad_batch(batch, reply, what)
-        verdicts += batch_verdicts
-        rules += batch_rules
-    return AdJudgement(verdicts=verdicts, proposed_rules=rules, cost_usd=cost)
+    skipped = 0
+    starts = range(0, len(records), batch_size)
+    with _metered() as meter:
+        for n, start in enumerate(starts, 1):
+            batch = records[start:start + batch_size]
+            what = f"ad batch {n} of {len(starts)}"
+            payload = json.dumps([_record_json(r, with_verdict=True, id=f"r{i}") for i, r in enumerate(batch)],
+                                 indent=2, ensure_ascii=False)
+            prompt = (f"Review these {len(batch)} ad-gate decisions. Return exactly one verdict per record, "
+                      f"using its id.\n\nRecords:\n{payload}\n")
+            reply = _call(prompt, "judge_ads.md", AD_SCHEMA, tuning, what, meter)
+            batch_verdicts, batch_rules, batch_skipped = _parse_ad_batch(batch, reply, what)
+            verdicts += batch_verdicts
+            rules += batch_rules
+            skipped += batch_skipped
+    return AdJudgement(verdicts=verdicts, proposed_rules=rules, cost_usd=meter.cost, skipped=skipped)
 
 
 def second_opinion_ad(record: AdRecord, tuning: TuningConfig) -> tuple[bool, float]:
     """Returns (is_ad, cost_usd) from a call that doesn't see the first verdict."""
-    what = f"second opinion on ad key {record.key}"
+    what = f"second opinion on ad {record.key[:8]}"
     payload = json.dumps(_record_json(record, with_verdict=False), indent=2, ensure_ascii=False)
     prompt = f"Decide whether this item is an advertisement.\n\nItem:\n{payload}\n"
-    reply, cost = _call(prompt, "second_opinion.md", SECOND_AD_SCHEMA, tuning, what)
-    _check_label(reply.get("is_ad"), reply.get("ad_type"), what)
-    return reply["is_ad"], cost
+    with _metered() as meter:
+        reply = _call(prompt, "second_opinion.md", SECOND_AD_SCHEMA, tuning, what, meter)
+        _check_label(reply.get("is_ad"), reply.get("ad_type"), what)
+    return reply["is_ad"], meter.cost
 
 
 def second_opinion_rule(rule_text: str, records: list[AdRecord], tuning: TuningConfig) -> tuple[bool, float]:
@@ -258,14 +304,14 @@ def second_opinion_rule(rule_text: str, records: list[AdRecord], tuning: TuningC
         indent=2, ensure_ascii=False)
     prompt = (f"Decide whether this rule is safe to add to the ad gate, checking it against "
               f"{len(items)} news items.\n\n{payload}\n")
-    reply, cost = _call(prompt, "second_opinion_rule.md", SECOND_RULE_SCHEMA, tuning, what)
-    sound, would_remove = reply.get("sound"), reply.get("would_remove")
-    if not isinstance(sound, bool) or not isinstance(would_remove, list):
-        raise JudgeError(f"{what}: reply needs a boolean sound and a would_remove list")
-    for i in would_remove:
-        if type(i) is not int or not 0 <= i < len(items):
-            raise JudgeError(f"{what}: id {i!r} out of range for {len(items)} items")
-    return sound and not would_remove, cost
+    with _metered() as meter:
+        reply = _call(prompt, "second_opinion_rule.md", SECOND_RULE_SCHEMA, tuning, what, meter)
+        sound, would_remove = reply.get("sound"), reply.get("would_remove")
+        if not isinstance(sound, bool) or not isinstance(would_remove, list):
+            raise JudgeError(f"{what}: reply needs a boolean sound and a would_remove list")
+    # Any entry in would_remove, even an id that matches no item, rejects the
+    # rule: the cautious reading of a reply that names an item to remove.
+    return sound and not would_remove, meter.cost
 
 
 # ---------- dedup ----------
@@ -303,25 +349,24 @@ def _parse_case(raw, batch_titles: list[str], what: str) -> DedupCase | None:
 def judge_dedup(records: list[DedupRecord], tuning: TuningConfig) -> tuple[list[DedupCase], float, int]:
     """Returns (cases, cost_usd, skipped): skipped counts cases dropped for an unknown or repeated id."""
     cases: list[DedupCase] = []
-    cost = 0.0
     skipped = 0
-    for record in records:
-        what = f"dedup batch {record.key} ({record.topic})"
-        payload = json.dumps(_dedup_payload(record), indent=2, ensure_ascii=False)
-        prompt = (f"Review this duplicate-check batch of {len(record.titles)} titles from the "
-                  f"{record.topic} topic.\n\nItems:\n{payload}\n")
-        reply, call_cost = _call(prompt, "judge_dedup.md", DEDUP_SCHEMA, tuning, what)
-        cost += call_cost
-        raw_cases = reply.get("cases")
-        if not isinstance(raw_cases, list):
-            raise JudgeError(f"{what}: reply has no cases list")
-        for raw in raw_cases:
-            case = _parse_case(raw, record.titles, what)
-            if case is None:
-                skipped += 1
-            else:
-                cases.append(case)
-    return cases, cost, skipped
+    with _metered() as meter:
+        for record in records:
+            what = f"dedup batch {record.key} ({record.topic})"
+            payload = json.dumps(_dedup_payload(record), indent=2, ensure_ascii=False)
+            prompt = (f"Review this duplicate-check batch of {len(record.titles)} titles from the "
+                      f"{record.topic} topic.\n\nItems:\n{payload}\n")
+            reply = _call(prompt, "judge_dedup.md", DEDUP_SCHEMA, tuning, what, meter)
+            raw_cases = reply.get("cases")
+            if not isinstance(raw_cases, list):
+                raise JudgeError(f"{what}: reply has no cases list")
+            for raw in raw_cases:
+                case = _parse_case(raw, record.titles, what)
+                if case is None:
+                    skipped += 1
+                else:
+                    cases.append(case)
+    return cases, meter.cost, skipped
 
 
 def second_opinion_dedup(case: DedupCase, tuning: TuningConfig) -> tuple[bool, float]:
@@ -329,6 +374,7 @@ def second_opinion_dedup(case: DedupCase, tuning: TuningConfig) -> tuple[bool, f
     what = f"second opinion on dedup case {case.titles[:1]!r}"
     payload = json.dumps([{"id": i, "title": t} for i, t in enumerate(case.titles)], indent=2, ensure_ascii=False)
     prompt = f"Group the duplicates among these {len(case.titles)} titles.\n\nTitles:\n{payload}\n"
-    reply, cost = _call(prompt, "second_opinion.md", SECOND_DEDUP_SCHEMA, tuning, what)
-    groups = _check_groups(reply.get("groups"), len(case.titles), what)
-    return {frozenset(g) for g in groups} == {frozenset(g) for g in case.expected_groups}, cost
+    with _metered() as meter:
+        reply = _call(prompt, "second_opinion.md", SECOND_DEDUP_SCHEMA, tuning, what, meter)
+        groups = _check_groups(reply.get("groups"), len(case.titles), what)
+    return {frozenset(g) for g in groups} == {frozenset(g) for g in case.expected_groups}, meter.cost

@@ -179,6 +179,7 @@ class _Report:
     over_cap: int = 0
     dedup_batches: int = 0
     dedup_skipped: int = 0
+    ad_skipped: int = 0
     cost: float = 0.0
     second_calls: int = 0
     error: str = ""
@@ -243,7 +244,8 @@ class _Report:
                 second = "agreed" if m.second else "disagreed, so the change was dropped"
             out.append(f'- "{m.record.title}" ({m.record.source}). Gate verdict: {m.record.verdict}. '
                        f"Judge: {label} ({m.verdict.ad_type}), {m.verdict.reason}. Second opinion: {second}.")
-        out.append("")
+        out += [f"- Records skipped: {self.ad_skipped} (the judge returned no usable verdict for them, "
+                f"so they were not judged).", ""]
 
         hidden = [m for m in self.mistakes if not m.verdict.visible_in_excerpt]
         if hidden:
@@ -309,6 +311,8 @@ class _Tuner:
         records = self._select_ads(ads)
         judgement = judge_ads(records, self.tuning) if records else AdJudgement([], [], 0.0)
         self.rep.cost += judgement.cost_usd
+        self.rep.ad_skipped = judgement.skipped
+        self.rep.judged_ads -= judgement.skipped
         cases: list[DedupCase] = []
         if dedups:
             cases, cost, skipped = judge_dedup(dedups, self.tuning)
@@ -630,6 +634,8 @@ def run_tune(config: Config, date: str, log: Callable[[str], None] = print) -> T
     try:
         tuner.run()
     except _RUN_ERRORS as exc:
+        if isinstance(exc, JudgeError):
+            report.cost += exc.cost_usd  # calls that ran before the failure still cost
         report.error = f"A call failed, so the run applied nothing: {type(exc).__name__}: {exc}"
     except Exception as exc:  # a bug; report it rather than crash the daily job
         report.error = f"Unexpected error, so the run applied nothing: {type(exc).__name__}: {exc}"
