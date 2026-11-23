@@ -18,6 +18,7 @@ from .topics import PAPERS_MODES, Topic
 
 DEFAULT_TOKEN_DIR = Path.home() / ".config" / "newsradar"
 GMAIL_SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"]
+REPO_DATA_DIR = Path(__file__).resolve().parents[2] / "data"
 
 
 @dataclass
@@ -77,6 +78,19 @@ class PipelineConfig:
 
 
 @dataclass
+class TuningConfig:
+    enabled: bool = False
+    data_dir: Path = REPO_DATA_DIR
+    judge_model: str = "claude-opus-5-5"
+    judge_effort: str = "medium"
+    max_items_per_run: int = 300
+    max_new_examples_per_day: int = 8
+    learned_examples_per_class: int = 12
+    max_rules_chars: int = 1500
+    evidence_days: int = 30
+
+
+@dataclass
 class Config:
     config_path: Path
     repo_root: Path  # directory containing the config file; base for relative paths
@@ -88,6 +102,7 @@ class Config:
     feeds_csv: Path
     topics: dict[str, Topic]
     publish_hook: str | None = None  # dotted path "module:function", e.g. "hooks.publish:publish"
+    tuning: TuningConfig = field(default_factory=TuningConfig)
 
     def topic(self, name: str) -> Topic:
         try:
@@ -260,6 +275,28 @@ def load_config(config_path: str | Path, env_file: str | Path | None = None) -> 
 
     publish_hook = raw.get("publish", {}).get("hook")
 
+    tuning_raw = raw.get("tuning", {})
+    tuning_defaults = TuningConfig()
+    tuning = TuningConfig(
+        enabled=bool(tuning_raw.get("enabled", tuning_defaults.enabled)),
+        data_dir=(
+            _resolve_path(base, tuning_raw["data_dir"])
+            if "data_dir" in tuning_raw
+            else tuning_defaults.data_dir
+        ),
+        judge_model=str(tuning_raw.get("judge_model", tuning_defaults.judge_model)),
+        judge_effort=str(tuning_raw.get("judge_effort", tuning_defaults.judge_effort)),
+        max_items_per_run=int(tuning_raw.get("max_items_per_run", tuning_defaults.max_items_per_run)),
+        max_new_examples_per_day=int(
+            tuning_raw.get("max_new_examples_per_day", tuning_defaults.max_new_examples_per_day)
+        ),
+        learned_examples_per_class=int(
+            tuning_raw.get("learned_examples_per_class", tuning_defaults.learned_examples_per_class)
+        ),
+        max_rules_chars=int(tuning_raw.get("max_rules_chars", tuning_defaults.max_rules_chars)),
+        evidence_days=int(tuning_raw.get("evidence_days", tuning_defaults.evidence_days)),
+    )
+
     return Config(
         config_path=config_path,
         repo_root=base,
@@ -271,4 +308,5 @@ def load_config(config_path: str | Path, env_file: str | Path | None = None) -> 
         feeds_csv=feeds_csv,
         topics=topics,
         publish_hook=publish_hook,
+        tuning=tuning,
     )
