@@ -95,7 +95,7 @@ AD_SCHEMA = _obj({
 DEDUP_SCHEMA = _obj({
     "cases": {"type": "array", "items": _obj({
         "kind": {"type": "string", "enum": CASE_KINDS},
-        "titles": {"type": "array", "items": _STR},
+        "ids": {"type": "array", "items": {"type": "integer"}},
         "expected_groups": _GROUPS,
         "note": _STR,
     })},
@@ -255,24 +255,28 @@ def _dedup_payload(record: DedupRecord) -> list[dict]:
             for i, t in enumerate(record.titles)]
 
 
-def _parse_case(raw, batch_titles: set[str], what: str) -> DedupCase:
+def _parse_case(raw, batch_titles: list[str], what: str) -> DedupCase | None:
+    """Build a case from batch ids. Returns None when an id is unknown or repeated."""
     if not isinstance(raw, dict) or raw.get("kind") not in CASE_KINDS:
         raise JudgeError(f"{what}: bad case {raw!r}")
-    titles = raw.get("titles")
-    if not isinstance(titles, list) or len(titles) < 2 or not all(isinstance(t, str) for t in titles):
-        raise JudgeError(f"{what}: a case needs at least 2 titles")
-    for t in titles:
-        if t not in batch_titles:
-            raise JudgeError(f"{what}: case title {t!r} is not in the batch")
-    groups = _check_groups(raw.get("expected_groups"), len(titles), what)
+    ids = raw.get("ids")
+    if not isinstance(ids, list) or len(ids) < 2:
+        raise JudgeError(f"{what}: a case needs at least 2 ids")
+    if (len(set(map(repr, ids))) != len(ids)
+            or not all(type(i) is int and 0 <= i < len(batch_titles) for i in ids)):
+        return None
+    groups = _check_groups(raw.get("expected_groups"), len(ids), what)
     if raw["kind"] == "missed_duplicate" and not groups:
         raise JudgeError(f"{what}: a missed_duplicate case needs a duplicate group")
-    return DedupCase(titles=list(titles), expected_groups=groups, kind=raw["kind"], note=str(raw.get("note") or ""))
+    return DedupCase(titles=[batch_titles[i] for i in ids], expected_groups=groups, kind=raw["kind"],
+                     note=str(raw.get("note") or ""))
 
 
-def judge_dedup(records: list[DedupRecord], tuning: TuningConfig) -> tuple[list[DedupCase], float]:
+def judge_dedup(records: list[DedupRecord], tuning: TuningConfig) -> tuple[list[DedupCase], float, int]:
+    """Returns (cases, cost_usd, skipped): skipped counts cases dropped for an unknown or repeated id."""
     cases: list[DedupCase] = []
     cost = 0.0
+    skipped = 0
     for record in records:
         what = f"dedup batch {record.key} ({record.topic})"
         payload = json.dumps(_dedup_payload(record), indent=2, ensure_ascii=False)
@@ -283,9 +287,13 @@ def judge_dedup(records: list[DedupRecord], tuning: TuningConfig) -> tuple[list[
         raw_cases = reply.get("cases")
         if not isinstance(raw_cases, list):
             raise JudgeError(f"{what}: reply has no cases list")
-        batch_titles = set(record.titles)
-        cases += [_parse_case(raw, batch_titles, what) for raw in raw_cases]
-    return cases, cost
+        for raw in raw_cases:
+            case = _parse_case(raw, record.titles, what)
+            if case is None:
+                skipped += 1
+            else:
+                cases.append(case)
+    return cases, cost, skipped
 
 
 def second_opinion_dedup(case: DedupCase, tuning: TuningConfig) -> bool:

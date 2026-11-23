@@ -35,10 +35,10 @@ Report two kinds of mistakes, each as one small case.
 - `wrong_merge`: a dropped item that duplicates no surviving item. The check removed a distinct story.
 - `missed_duplicate`: two or more surviving items that cover the same story. The check should have dropped all but one.
 
-Each case is a short list of titles the duplicate check can be tested on:
+Each case is a short list of items from the batch that the duplicate check can be tested on:
 
-- `titles`: the titles involved in the mistake, followed by up to 3 unrelated titles from the same batch as distractors. Copy every title exactly as it appears in the batch, character for character. For a `wrong_merge`, include the dropped title and the surviving title it was most likely merged with.
-- `expected_groups`: the correct duplicate groups among this case's titles, as lists of 0-based positions in the case's own `titles` list, not batch ids. Each group has at least 2 members, and no position appears in more than one group. Titles that duplicate nothing are left out of every group. A `wrong_merge` case usually has no groups (`[]`). A `missed_duplicate` case has at least one group.
+- `ids`: the batch ids of the items involved in the mistake, followed by the ids of up to 3 unrelated items from the same batch as distractors. Use each item's `id` from the batch, and list each id once. For a `wrong_merge`, include the dropped item and the surviving item it was most likely merged with.
+- `expected_groups`: the correct duplicate groups among this case's items, as lists of 0-based positions in the case's own `ids` list, not batch ids. The first id in `ids` is position 0, the second is position 1, and so on. Each group has at least 2 members, and no position appears in more than one group. Items that duplicate nothing are left out of every group. A `wrong_merge` case usually has no groups (`[]`). A `missed_duplicate` case has at least one group.
 - `kind`: `wrong_merge` or `missed_duplicate`.
 - `note`: one sentence on why, naming the story or stories, written for a person maintaining the duplicate check.
 
@@ -50,22 +50,22 @@ Batch:
 
 ```
 0. OpenAI releases GPT-6 with longer context   (survived)
-1. GPT-6 is here: what OpenAI's new model can do   (survived)
+1. Nvidia reports record data center revenue   (survived)
 2. OpenAI cuts API prices for GPT-5   (dropped)
-3. Nvidia reports record data center revenue   (survived)
+3. GPT-6 is here: what OpenAI's new model can do   (survived)
 4. Rust 2.0 ships with a new borrow checker   (survived)
 ```
 
-Items 0 and 1 cover the same release, and both survived: a missed duplicate. Item 2 is a different OpenAI announcement that was dropped, probably merged into item 0: a wrong merge. Two cases:
+Items 0 and 3 cover the same release, and both survived: a missed duplicate. Item 2 is a different OpenAI announcement that was dropped, probably merged into item 0: a wrong merge. Two cases follow. In the first, batch ids 0 and 3 sit at positions 0 and 1 of `ids`, so the group is `[0, 1]`.
 
 ```
 {"kind": "missed_duplicate",
- "titles": ["OpenAI releases GPT-6 with longer context", "GPT-6 is here: what OpenAI's new model can do", "Nvidia reports record data center revenue", "Rust 2.0 ships with a new borrow checker"],
+ "ids": [0, 3, 1, 4],
  "expected_groups": [[0, 1]],
  "note": "Both cover the GPT-6 release."}
 
 {"kind": "wrong_merge",
- "titles": ["OpenAI cuts API prices for GPT-5", "OpenAI releases GPT-6 with longer context", "Nvidia reports record data center revenue"],
+ "ids": [2, 0, 1],
  "expected_groups": [],
  "note": "A GPT-5 price cut is a different announcement from the GPT-6 release; same company is not enough."}
 ```

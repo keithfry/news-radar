@@ -226,42 +226,58 @@ def case_reply(*cases):
 
 def test_judge_dedup_returns_cases_with_valid_indices(fake_claude):
     fake_claude.cost = 0.5
-    fake_claude.reply = case_reply({"kind": "missed_duplicate", "titles": [TITLES[0], TITLES[1], TITLES[3]],
+    fake_claude.reply = case_reply({"kind": "missed_duplicate", "ids": [0, 1, 3],
                                     "expected_groups": [[0, 1]], "note": "same launch"})
-    cases, cost = judge_dedup([drec(TITLES, [])], TUNING)
+    cases, cost, skipped = judge_dedup([drec(TITLES, [])], TUNING)
     assert cases == [DedupCase(titles=[TITLES[0], TITLES[1], TITLES[3]], expected_groups=[[0, 1]],
                                kind="missed_duplicate", note="same launch")]
-    assert cost == 0.5
+    assert cost == 0.5 and skipped == 0
     call = fake_claude.calls[0]
     assert call["model"] == "claude-opus-5-5" and call["effort"] == "medium" and call["json_schema"]
 
 
+def test_case_titles_come_from_the_batch_verbatim(fake_claude):
+    titles = ["OpenAI\u00a0ships  GPT-6 \u201cnow\u201d", "GPT-6 is out", "Other"]
+    fake_claude.reply = case_reply({"kind": "missed_duplicate", "ids": [1, 0],
+                                    "expected_groups": [[0, 1]], "note": ""})
+    cases, _, _ = judge_dedup([drec(titles, [])], TUNING)
+    assert cases[0].titles == [titles[1], titles[0]]
+
+
 @pytest.mark.parametrize("groups", [[[0, 3]], [[0]], [[-1, 0]], [[0, 1], [1, 2]]])
 def test_judge_dedup_bad_groups_raise(fake_claude, groups):
-    fake_claude.reply = case_reply({"kind": "missed_duplicate", "titles": [TITLES[0], TITLES[1], TITLES[3]],
+    fake_claude.reply = case_reply({"kind": "missed_duplicate", "ids": [0, 1, 3],
                                     "expected_groups": groups, "note": ""})
     with pytest.raises(JudgeError, match="d1"):
         judge_dedup([drec(TITLES, [])], TUNING)
 
 
-def test_judge_dedup_title_not_in_batch_raises(fake_claude):
-    fake_claude.reply = case_reply({"kind": "wrong_merge", "titles": ["Invented title", TITLES[2]],
-                                    "expected_groups": [], "note": ""})
-    with pytest.raises(JudgeError, match="not in the batch"):
-        judge_dedup([drec(TITLES, [1])], TUNING)
+@pytest.mark.parametrize("ids", [[99, 2], [-1, 2], [2, 2], ["2", 3], [True, 3]])
+def test_case_with_unknown_id_is_skipped_and_counted(fake_claude, ids):
+    fake_claude.reply = case_reply(
+        {"kind": "wrong_merge", "ids": ids, "expected_groups": [], "note": "bad"},
+        {"kind": "wrong_merge", "ids": [2, 3], "expected_groups": [], "note": "good"})
+    cases, _, skipped = judge_dedup([drec(TITLES, [3])], TUNING)
+    assert [c.note for c in cases] == ["good"] and skipped == 1
+
+
+def test_case_needs_two_ids(fake_claude):
+    fake_claude.reply = case_reply({"kind": "wrong_merge", "ids": [2], "expected_groups": [], "note": ""})
+    with pytest.raises(JudgeError):
+        judge_dedup([drec(TITLES, [2])], TUNING)
 
 
 def test_missed_duplicate_needs_a_group(fake_claude):
-    fake_claude.reply = case_reply({"kind": "missed_duplicate", "titles": [TITLES[0], TITLES[2]],
+    fake_claude.reply = case_reply({"kind": "missed_duplicate", "ids": [0, 2],
                                     "expected_groups": [], "note": ""})
     with pytest.raises(JudgeError):
         judge_dedup([drec(TITLES, [])], TUNING)
 
 
 def test_wrong_merge_with_no_groups_is_valid(fake_claude):
-    fake_claude.reply = case_reply({"kind": "wrong_merge", "titles": [TITLES[2], TITLES[3]],
+    fake_claude.reply = case_reply({"kind": "wrong_merge", "ids": [2, 3],
                                     "expected_groups": [], "note": "different stories"})
-    cases, _ = judge_dedup([drec(TITLES, [3])], TUNING)
+    cases, _, _ = judge_dedup([drec(TITLES, [3])], TUNING)
     assert cases[0].kind == "wrong_merge" and cases[0].expected_groups == []
 
 
@@ -269,8 +285,8 @@ def test_judge_dedup_one_call_per_record_and_marks_drops(fake_claude):
     fake_claude.cost = 0.1
     fake_claude.reply = case_reply()
     titles = ["Same story", "same  STORY", "Other"]
-    cases, cost = judge_dedup([drec(titles, [1], key="a"), drec(TITLES, [], key="b")], TUNING)
-    assert cases == [] and len(fake_claude.calls) == 2 and cost == pytest.approx(0.2)
+    cases, cost, skipped = judge_dedup([drec(titles, [1], key="a"), drec(TITLES, [], key="b")], TUNING)
+    assert cases == [] and skipped == 0 and len(fake_claude.calls) == 2 and cost == pytest.approx(0.2)
     prompt = fake_claude.calls[0]["prompt"]
     items = json.loads(prompt[prompt.index("["):prompt.rindex("]") + 1])
     assert items[1] == {"id": 1, "title": "same  STORY", "dropped": True, "exact_title_drop": True}
