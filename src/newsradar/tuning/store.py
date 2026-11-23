@@ -3,13 +3,27 @@
 from __future__ import annotations
 
 import json
+import re
 import shutil
+from datetime import date as _date, timedelta
 from pathlib import Path
 from urllib.parse import urlparse
 
 DEDUP_CASES_IN_PROMPT = 12
 _MODELFILE_NAME = "Modelfile"
 _DEDUP_HEADING = "LEARNED EXAMPLES (past mistakes to avoid):"
+_DATED_NAME = re.compile(r"(\d{4}-\d{2}-\d{2})(?:-(\d+))?")
+
+
+def _dated(name: str) -> tuple[_date, int] | None:
+    """Read "2026-11-23" or a same-day "2026-11-23-2" as (date, n). None if it doesn't parse."""
+    m = _DATED_NAME.fullmatch(name)
+    if not m:
+        return None
+    try:
+        return _date.fromisoformat(m.group(1)), int(m.group(2) or 1)
+    except ValueError:
+        return None
 
 
 def domain_only(url: str) -> str:
@@ -64,7 +78,11 @@ class TuningStore:
         self._write_json(self._dedup_cases, cases)
 
     def dedup_examples_block(self) -> str:
-        cases = self.dedup_cases()
+        return self.dedup_block_for(self.dedup_cases())
+
+    @staticmethod
+    def dedup_block_for(cases: list[dict]) -> str:
+        """Format cases as the dedup prompt's learned block, without saving them."""
         if not cases:
             return ""
         # sorted() is stable, so cases without "added" keep their stored order.
@@ -108,6 +126,37 @@ class TuningStore:
             found.append(base / f"{date}-{n}")
             n += 1
         return found[-1] if found else None
+
+    def prune(self, today: str, keep_days: int) -> list[str]:
+        """Delete snapshots and reports dated more than keep_days before today.
+
+        The newest snapshot stays however old it is, so rollback still works,
+        and today's report always stays. Returns the removed paths relative to
+        the tuning folder.
+        """
+        cutoff = _date.fromisoformat(today) - timedelta(days=keep_days)
+        removed: list[str] = []
+        base = self.root / "snapshots"
+        snaps = []
+        if base.is_dir():
+            for d in base.iterdir():
+                dated = _dated(d.name) if d.is_dir() else None
+                if dated is not None:
+                    snaps.append((dated, d))
+        if snaps:
+            newest = max(snaps, key=lambda s: s[0])[1]
+            for (day, _), d in sorted(snaps, key=lambda s: s[0]):
+                if day < cutoff and d != newest:
+                    shutil.rmtree(d, ignore_errors=True)
+                    removed.append(f"snapshots/{d.name}")
+        reports = self.root / "reports"
+        if reports.is_dir():
+            for f in sorted(reports.glob("*.md")):
+                dated = _dated(f.stem)
+                if dated is not None and dated[0] < cutoff and f.stem != today:
+                    f.unlink(missing_ok=True)
+                    removed.append(f"reports/{f.name}")
+        return removed
 
     def report_path(self, date: str) -> Path:
         return self.root / "reports" / f"{date}.md"

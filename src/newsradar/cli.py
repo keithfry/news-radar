@@ -13,6 +13,9 @@ Usage:
     newsradar --config config.toml --transcript-only             # rebuild transcript.json only, no TTS
     newsradar --config config.toml --refresh-token              # re-authenticate with Gmail, then exit
     newsradar ad-detector install                                # install the ad-detector Ollama model
+    newsradar tune --config config.toml [--date YYYY-MM-DD]       # tune the ad gate and dedup from the day's evidence
+    newsradar tune --config config.toml --rebuild                 # rebuild ad-detector from base plus learned data
+    newsradar tune --config config.toml --rollback YYYY-MM-DD     # restore that day's snapshot and rebuild
 """
 
 from __future__ import annotations
@@ -672,8 +675,45 @@ def _build_parser() -> argparse.ArgumentParser:
     install_parser.add_argument("--model-name", default="ad-detector")
     install_parser.add_argument("--modelfile", type=str, default=None)
 
+    tune_parser = subparsers.add_parser("tune", help="Tune the ad gate and dedup check from the day's evidence")
+    tune_parser.add_argument("--config", type=str, required=True, help="Path to the news-radar TOML config file")
+    tune_parser.add_argument("--date", type=_iso_date, default=None, help="Evidence date YYYY-MM-DD (default: today in ET)")
+    tune_action = tune_parser.add_mutually_exclusive_group()
+    tune_action.add_argument("--rebuild", action="store_true", help="Rebuild the live ad-detector from base plus learned data, then exit")
+    tune_action.add_argument("--rollback", type=_iso_date, default=None, metavar="YYYY-MM-DD",
+                             help="Restore that day's snapshot and rebuild the live ad-detector, then exit")
+
     _add_run_args(parser)  # allow bare `newsradar --config ...` (no subcommand) to run the pipeline
     return parser
+
+
+def _iso_date(value: str) -> str:
+    try:
+        datetime.strptime(value, "%Y-%m-%d")
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"expected YYYY-MM-DD, got {value!r}") from None
+    return value
+
+
+def _run_tune_command(args: argparse.Namespace, parser: argparse.ArgumentParser) -> None:
+    from .tuning import tuner
+
+    config = load_config(args.config)
+    if args.rebuild:
+        tuner.rebuild_live_model(config)
+        print(f"Rebuilt {tuner.live_model_name(config)} from base plus learned data")
+        return
+    if args.rollback:
+        try:
+            tuner.rollback(config, args.rollback)
+        except FileNotFoundError as e:
+            parser.exit(1, f"{e}\n")
+        print(f"Restored the {args.rollback} snapshot and rebuilt {tuner.live_model_name(config)}")
+        return
+    if not config.tuning.enabled:
+        print("Tuning is off ([tuning] enabled = false); nothing to do.")
+        return
+    tuner.run_tune(config, args.date or datetime.now(ET).strftime("%Y-%m-%d"))
 
 
 def _add_run_args(parser: argparse.ArgumentParser) -> None:
@@ -703,6 +743,10 @@ def main() -> None:
             modelfile = Path(args.modelfile) if args.modelfile else None
             install_ad_detector_model(modelfile_path=modelfile, model_name=args.model_name)
             print(f"Installed ad-detector model: {args.model_name}")
+        return
+
+    if args.command == "tune":
+        _run_tune_command(args, parser)
         return
 
     if not args.config:

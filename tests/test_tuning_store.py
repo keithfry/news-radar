@@ -59,6 +59,15 @@ def test_dedup_block_formats_newest_twelve(tmp_path):
     assert "0. T15a" in block and "[[0, 1]]" in block
 
 
+def test_dedup_block_for_unsaved_cases_matches_saved_block(tmp_path):
+    s = TuningStore(tmp_path)
+    cases = [{"titles": ["A", "A2", "B"], "expected_groups": [[0, 1]], "kind": "missed_duplicate", "added": "2026-11-23"}]
+    block = TuningStore.dedup_block_for(cases)
+    assert "0. A\n1. A2\n2. B" in block and s.dedup_cases() == []
+    s.save_dedup_cases(cases)
+    assert s.dedup_examples_block() == block
+
+
 def test_dedup_block_empty_without_cases(tmp_path):
     assert TuningStore(tmp_path).dedup_examples_block() == ""
 
@@ -75,3 +84,50 @@ def test_domain_only_drops_port_and_never_raises():
     assert domain_only("http://[::1]:8080/a") == "http://[::1]/"
     assert domain_only("http://[::1/") == ""
     assert domain_only(None) == ""
+
+
+def _snap(s, name):
+    path = s.root / "snapshots" / name
+    path.mkdir(parents=True)
+    (path / "Modelfile").write_text("m")
+    return path
+
+
+def _report(s, date):
+    path = s.report_path(date)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("r")
+    return path
+
+
+def test_prune_removes_old_snapshots_and_reports(tmp_path):
+    s = TuningStore(tmp_path)
+    old_snap, new_snap = _snap(s, "2026-10-01"), _snap(s, "2026-11-20")
+    old_report, new_report = _report(s, "2026-10-01"), _report(s, "2026-11-20")
+    removed = s.prune("2026-11-23", 30)
+    assert not old_snap.exists() and not old_report.exists()
+    assert new_snap.exists() and new_report.exists()
+    assert sorted(removed) == ["reports/2026-10-01.md", "snapshots/2026-10-01"]
+
+
+def test_prune_keeps_newest_snapshot_even_when_old(tmp_path):
+    s = TuningStore(tmp_path)
+    older, newest = _snap(s, "2026-09-01"), _snap(s, "2026-10-01")
+    s.prune("2026-11-23", 30)
+    assert not older.exists() and newest.exists() and s.latest_snapshot("2026-10-01") == newest
+
+
+def test_prune_reads_suffixed_snapshot_names_and_skips_unparsed(tmp_path):
+    s = TuningStore(tmp_path)
+    first, second = _snap(s, "2026-10-01"), _snap(s, "2026-10-01-2")
+    later_old = _snap(s, "2026-10-01-10")  # newest: suffix 10 sorts after 2 by number
+    odd = _snap(s, "not-a-date")
+    removed = s.prune("2026-11-23", 30)
+    assert not first.exists() and not second.exists() and later_old.exists() and odd.exists()
+    assert sorted(removed) == ["snapshots/2026-10-01", "snapshots/2026-10-01-2"]
+
+
+def test_prune_never_deletes_todays_report(tmp_path):
+    s = TuningStore(tmp_path)
+    today = _report(s, "2026-11-23")
+    assert s.prune("2026-11-23", 0) == [] and today.exists()
