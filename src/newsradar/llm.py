@@ -12,8 +12,6 @@ import itertools
 import json
 import os
 import re
-import shutil
-import subprocess
 import sys
 import threading
 import time
@@ -23,6 +21,7 @@ import httpx
 import json_repair
 import ollama
 
+from .claude_cli import ClaudeCallError, run_claude
 from .topics import Topic
 
 _llm_call_lock = threading.Lock()
@@ -126,13 +125,8 @@ def _chat_anthropic(prompt: str, model: str, json_mode: bool = False) -> str:
     authenticated locally, not the Anthropic API/ANTHROPIC_API_KEY directly."""
     global _llm_call_count, _llm_total_duration
 
-    claude_bin = shutil.which("claude") or os.path.expanduser("~/.local/bin/claude")
-
     t0 = time.perf_counter()
-    result = subprocess.run(
-        [claude_bin, "-p", prompt, "--model", model, "--output-format", "text"],
-        capture_output=True, text=True, check=True,
-    )
+    result = run_claude(prompt, model)
     elapsed = time.perf_counter() - t0
 
     with _llm_call_lock:
@@ -142,7 +136,7 @@ def _chat_anthropic(prompt: str, model: str, json_mode: bool = False) -> str:
 
     print(f"  [llm:{cnt}] anthropic/{model} {elapsed:.3f}s", flush=True)
 
-    return result.stdout.strip()
+    return result.text.strip()
 
 
 _ARTICLE_CHAR_LIMIT = 24000  # ~6k tokens, leaves headroom for prompt+output in a 32k ctx window
@@ -451,7 +445,7 @@ def _dedup_batch(batch: list[tuple[int, dict]], model: str) -> dict[int, int]:
     num_ctx = _dedup_num_ctx(prompt)
     try:
         result = _chat_meta(prompt, model, json_mode=True, num_ctx=num_ctx)
-    except (ollama.ResponseError, subprocess.CalledProcessError) as exc:
+    except (ollama.ResponseError, ClaudeCallError) as exc:
         raise _DedupFailed(f"{exc.__class__.__name__}: {exc}") from exc
 
     if result.done_reason == "length":
