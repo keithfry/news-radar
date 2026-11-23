@@ -2,7 +2,8 @@
 
 Run after adding new labeled examples, then rebuild the Ollama model:
     uv run -m newsradar.ad_detector.update_modelfile
-    ollama rm ad-detector && ollama create ad-detector -f AdDetectorModelfile
+    uv run newsradar tune --config <config> --rebuild
+(A bare `ollama create` builds from the base Modelfile only and drops learned data.)
 
 Up to MAX_EXAMPLES are selected (balanced between ads and not-ads).
 """

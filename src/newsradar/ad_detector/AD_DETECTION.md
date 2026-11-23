@@ -45,10 +45,11 @@ Schema per example:
   "title": "...",
   "summary": "...",
   "source": "sender or domain",
-  "link": "...",
+  "link": "https://host/",
   "is_ad": true,
   "ad_type": "referral_program | lead_gen_offer | newsletter_cta | subscription_pitch | sponsor_content | product_feature_disguised | not_ad",
-  "notes": "why this is or isn't an ad"
+  "notes": "why this is or isn't an ad",
+  "added": "YYYY-MM-DD"
 }
 ```
 
@@ -94,61 +95,67 @@ the exact `--rebuild` and `--rollback` commands for that config.
   model) and rebuilds the live model from it.
 
 The tuner builds a `*-candidate` model to test a change and removes it at the end
-of the run. A bare `ollama create` drops learned data, as noted above.
+of the run. A bare `ollama create` drops learned data, as the Ongoing Workflow section explains.
 
 ## Ongoing Workflow
 
 ### When new ads slip through the digest
 
-1. **Extract candidates from the offending HTML file:**
+The daily tuner (above) handles most of this. To add examples by hand:
+
+1. **Find the ad items** in the offending digest page or in the day's evidence under
+   `data/evidence/DATE/`. Copy the title, summary and source.
+
+2. **Add them to `tests/test_data/labeled_examples.json`** with `is_ad: true` and an
+   `ad_type`. Cut `link` to `scheme://host/` (a test enforces this) and leave it empty if
+   the item has no link.
+
+3. **Add a matching non-ad example** from the same page to keep the dataset balanced.
+
+4. **Run the tests** to check the dataset and the heuristic:
    ```bash
-   uv run extract_examples.py ../../techradar/AI/ai-radar-YYYY-MM-DD.html
+   uv run pytest tests/test_ad_detector.py
    ```
-   Output is newline-delimited JSON to stdout. Each item has `"is_ad": null`.
 
-2. **Find the ad items**, copy them into `test_data/labeled_examples.json`, set `is_ad: true` and `ad_type`.
-
-3. **Add a matching non-ad example** from the same file to keep the dataset balanced.
-
-4. **Run the test harness to measure current performance:**
+5. **Regenerate the Modelfile examples and rebuild the live model:**
    ```bash
-   uv run test_ad_detector.py --verbose
-   ```
-   Check recall — any false negatives listed are the ads still slipping through.
-
-5. **Rebuild the custom model** with the new examples baked in:
-   ```bash
-   uv run update_modelfile.py
+   uv run -m newsradar.ad_detector.update_modelfile
    uv run newsradar tune --config <config> --rebuild
    ```
    Do not run a bare `ollama create ad-detector -f AdDetectorModelfile`. It builds
    from the base Modelfile only and drops everything the daily tuner learned.
-   `--rebuild` builds from the base Modelfile plus the learned data.
+   `--rebuild` builds from the base Modelfile plus the learned data. To install the
+   base model with no learned data, for example on a new machine, run
+   `uv run newsradar ad-detector install`.
 
-6. **Re-run the harness** to confirm improvement:
+6. **Re-run the tests.** `test_llm_ad_gate_detector_metrics` runs only when the
+   `ad-detector` model is installed in Ollama, and requires F1 of at least 0.8:
    ```bash
-   uv run test_ad_detector.py --detector custom
+   uv run pytest tests/test_ad_detector.py
    ```
 
-7. **Dry-run the pipeline** to confirm no false positives on real content:
+7. **Check real content with a scratch config, never the real one.** A scan with the
+   real config writes pages into the site folder that the 08:00 job deploys, even with
+   `--dry-run`. Copy the config, point `[paths] output_root` at a temporary folder, delete
+   the `[publish]` section, and scan with the copy:
    ```bash
-   uv run main.py --dry-run --no-email --date YYYY-MM-DD
-   grep "ad gate\|advertisement" ../../logs/ai-techradar-agent-YYYY-MM-DD.log
+   uv run newsradar --config /tmp/scratch-config.toml --dry-run --no-email --date YYYY-MM-DD
    ```
+   Then read the scan log for "ad gate" and "advertisement" lines.
 
-### Test harness usage
+### Tests
 
 ```bash
-uv run test_ad_detector.py                    # all three detectors
-uv run test_ad_detector.py --detector heuristic
-uv run test_ad_detector.py --detector llm      # llama3.2:3b, no system prompt
-uv run test_ad_detector.py --detector custom   # ad-detector (qwen3.5:9b + system prompt)
-uv run test_ad_detector.py --verbose           # per-example pass/fail table
+uv run pytest tests/test_ad_detector.py
 ```
+
+The file checks that the dataset loads, that every example link is domain-only, that the
+title heuristic never flags a non-ad, and (when the model is installed) that the
+`ad-detector` model scores F1 of at least 0.8.
 
 ## Current Benchmark (May 2026)
 
-24 labeled examples — 15 ads, 9 not-ads.
+Measured in May 2026 on 24 of the examples. The file now has 26, 16 ads and 10 not-ads.
 
 | Detector | Precision | Recall | F1 |
 |---|---|---|---|
