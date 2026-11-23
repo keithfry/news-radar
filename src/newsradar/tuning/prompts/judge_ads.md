@@ -78,12 +78,9 @@ Return exactly one verdict per record, with its `id`. Don't skip a record and do
 
 ### The example
 
-The example is shown to the gate as `Title: ...` and `Summary: ...`, so it must look like what the gate sees.
+The example is shown to the gate as `Title: ...` and `Summary: ...`, so it must look like what the gate sees. The script takes the title, source and link from the record, so you write only two fields.
 
-- `title`: the record's title, copied exactly.
 - `summary`: at most 200 characters, taken from the start of `text_sent`. Copy the item's own words in order. You may skip pure navigation noise such as "View in browser" or a run of bare links, but keep any promotional lines the gate saw, because the gate has to learn to look past them.
-- `source`: the record's source, copied exactly.
-- `link`: the record's link, copied exactly. The script cuts it down to the domain.
 - `notes`: one sentence on why the label is right, written for a person maintaining the gate.
 
 ## Proposed rules

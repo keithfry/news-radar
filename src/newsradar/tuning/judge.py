@@ -86,7 +86,8 @@ _BOOL = {"type": "boolean"}
 _AD_TYPE = {"type": "string", "enum": AD_TYPES}
 _GROUPS = {"type": "array", "items": {"type": "array", "items": {"type": "integer"}}}
 
-_EXAMPLE_SCHEMA = _obj({"title": _STR, "summary": _STR, "source": _STR, "link": _STR, "notes": _STR})
+# Title, source and link come from the record, so the model writes only these.
+_EXAMPLE_SCHEMA = _obj({"summary": _STR, "notes": _STR})
 
 AD_SCHEMA = _obj({
     "verdicts": {"type": "array", "items": _obj({
@@ -173,8 +174,12 @@ def _record_json(record: AdRecord, with_verdict: bool, id: str | None = None) ->
     return out
 
 
+def _label_ok(is_ad, ad_type) -> bool:
+    return isinstance(is_ad, bool) and ad_type in AD_TYPES and is_ad == (ad_type != "not_ad")
+
+
 def _check_label(is_ad, ad_type, what: str) -> None:
-    if not isinstance(is_ad, bool) or ad_type not in AD_TYPES or is_ad != (ad_type != "not_ad"):
+    if not _label_ok(is_ad, ad_type):
         raise JudgeError(f"{what}: is_ad={is_ad!r} doesn't fit ad_type={ad_type!r}")
 
 
@@ -199,12 +204,15 @@ def _check_groups(groups, size: int, what: str) -> list[list[int]]:
 # ---------- ads ----------
 
 def _make_example(record: AdRecord, verdict: AdVerdict, raw: dict) -> dict:
+    """A labeled example for the gate. Title, source and link always come from
+    the record; raw supplies only summary and notes. An empty summary falls
+    back to the start of text_sent."""
     return {
         "id": f"{_slug(record.source)}-{record.date}-{record.key[:8]}",
-        "title": str(raw.get("title") or record.title),
-        "summary": str(raw.get("summary") or "")[:SUMMARY_CHARS],
-        "source": str(raw.get("source") or record.source),
-        "link": domain_only(str(raw.get("link") or record.link)),
+        "title": record.title,
+        "summary": str(raw.get("summary") or record.text_sent)[:SUMMARY_CHARS],
+        "source": record.source,
+        "link": domain_only(record.link),
         "is_ad": verdict.is_ad,
         "ad_type": verdict.ad_type,
         "notes": str(raw.get("notes") or ""),
@@ -214,8 +222,11 @@ def _make_example(record: AdRecord, verdict: AdVerdict, raw: dict) -> dict:
 def _parse_ad_batch(batch: list[AdRecord], reply: dict,
                     what: str) -> tuple[list[AdVerdict], list[ProposedRule], int]:
     """Map a reply's r0..rN ids back to the batch. Returns (verdicts in batch
-    order, rules, records skipped). A record with no verdict or a repeated id is
-    skipped; a verdict with an unknown id is ignored."""
+    order, rules, records skipped). A record is skipped when it has no verdict,
+    its id is repeated, or its is_ad and ad_type disagree. A verdict with an
+    unknown id is ignored. `correct` is derived from the label and the gate's
+    verdict, not read from the reply. A mistake without an example gets one
+    built from the record."""
     by_id = {f"r{i}": r for i, r in enumerate(batch)}
     raw_verdicts = reply.get("verdicts")
     if not isinstance(raw_verdicts, list):
@@ -231,19 +242,15 @@ def _parse_ad_batch(batch: list[AdRecord], reply: dict,
         if len(raws) > 1:
             continue
         raw, record = raws[0], by_id[rid]
-        where = f"{what}, record {rid} ({record.key[:8]})"
-        _check_label(raw.get("is_ad"), raw.get("ad_type"), where)
-        correct = raw.get("correct")
-        if correct is not ((record.verdict == "ad") == raw["is_ad"]):
-            raise JudgeError(f"{where}: correct={correct!r} contradicts is_ad={raw['is_ad']} "
-                             f"for gate verdict {record.verdict!r}")
+        if not _label_ok(raw.get("is_ad"), raw.get("ad_type")):
+            continue
+        correct = raw["is_ad"] == (record.verdict == "ad")
         v = AdVerdict(key=record.key, correct=correct, is_ad=raw["is_ad"], ad_type=raw["ad_type"],
                       reason=str(raw.get("reason") or ""),
                       visible_in_excerpt=bool(raw.get("visible_in_excerpt")), example=None)
         if not correct:
-            if not isinstance(raw.get("example"), dict):
-                raise JudgeError(f"{where}: mistake has no example")
-            v.example = _make_example(record, v, raw["example"])
+            example = raw.get("example")
+            v.example = _make_example(record, v, example if isinstance(example, dict) else {})
         found[rid] = v
 
     skipped = len(batch) - len(found)

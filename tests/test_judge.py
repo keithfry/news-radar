@@ -23,7 +23,7 @@ from newsradar.tuning.judge import (
 )
 
 TUNING = TuningConfig()
-EX = {"title": "T", "summary": "S", "source": "The AI Report", "link": "https://a.com/", "notes": "n"}
+EX = {"summary": "S", "notes": "n"}
 
 
 class FakeClaude:
@@ -148,26 +148,42 @@ def test_skipped_counts_add_across_batches(fake_claude):
     assert out.skipped == 2 and [v.key for v in out.verdicts] == ["k1", "k2", "k4", "k5"]
 
 
-def test_correct_flag_must_agree_with_label(fake_claude):
-    # The gate kept the item (not_ad); the judge says it is an ad yet calls the verdict correct.
-    bad = {**verdict("r0"), "is_ad": True, "ad_type": "sponsor_content"}
-    fake_claude.reply = lambda p: {"verdicts": [bad], "proposed_rules": []}
-    with pytest.raises(JudgeError, match="k1"):
-        judge_ads([rec("k1")], TUNING)
+@pytest.mark.parametrize("gate,is_ad,sent_correct,expected", [
+    ("not_ad", True, True, False),   # the model calls a mistake correct: code says mistake
+    ("not_ad", False, False, True),  # the model calls a right verdict wrong: code says correct
+    ("ad", True, False, True),
+    ("ad", False, True, False),
+])
+def test_correct_is_derived_from_label_and_gate(fake_claude, gate, is_ad, sent_correct, expected):
+    v = {**verdict("r0"), "is_ad": is_ad, "ad_type": "sponsor_content" if is_ad else "not_ad",
+         "correct": sent_correct, "example": None}
+    fake_claude.reply = reply_for(v)
+    out = judge_ads([rec("k1", verdict=gate)], TUNING).verdicts[0]
+    assert out.correct is expected and (out.example is None) is expected
 
 
-@pytest.mark.parametrize("is_ad,ad_type", [(True, "not_ad"), (False, "sponsor_content"), (False, "made_up")])
-def test_ad_type_must_agree_with_label(fake_claude, is_ad, ad_type):
-    bad = {**verdict("r0", correct=not is_ad), "is_ad": is_ad, "ad_type": ad_type}
-    fake_claude.reply = lambda p: {"verdicts": [bad], "proposed_rules": []}
-    with pytest.raises(JudgeError):
-        judge_ads([rec("k1")], TUNING)
+@pytest.mark.parametrize("is_ad,ad_type", [(True, "not_ad"), (False, "sponsor_content"), (False, "made_up"),
+                                           ("yes", "not_ad")])
+def test_label_that_disagrees_with_ad_type_is_skipped(fake_claude, is_ad, ad_type):
+    bad = {**verdict("r1"), "is_ad": is_ad, "ad_type": ad_type}
+    fake_claude.reply = reply_for(verdict("r0"), bad, verdict("r2"))
+    out = judge_ads([rec("a"), rec("b"), rec("c")], TUNING)
+    assert [v.key for v in out.verdicts] == ["a", "c"] and out.skipped == 1
 
 
-def test_mistake_without_example_raises(fake_claude):
-    fake_claude.reply = lambda p: {"verdicts": [verdict("r0", correct=False, example=None)], "proposed_rules": []}
-    with pytest.raises(JudgeError, match="example"):
-        judge_ads([rec("k1")], TUNING)
+def test_bad_labels_count_toward_the_half_rule(fake_claude):
+    bad = {**verdict("r1"), "is_ad": True, "ad_type": "not_ad"}
+    fake_claude.reply = reply_for(verdict("r0"), bad)  # r1 bad, r2 missing: 2 of 3 unusable
+    with pytest.raises(JudgeError, match="2 of 3"):
+        judge_ads([rec("a"), rec("b"), rec("c")], TUNING)
+
+
+def test_mistake_without_example_gets_one_from_the_record(fake_claude):
+    fake_claude.reply = reply_for(verdict("r0", correct=False, example=None))
+    r = rec("k1", title="Real title", text_sent="y" * 300)
+    ex = judge_ads([r], TUNING).verdicts[0].example
+    assert ex["title"] == "Real title" and ex["summary"] == "y" * 200 and ex["notes"] == ""
+    assert ex["source"] == r.source and ex["link"] == "https://x.com/" and ex["is_ad"] is True
 
 
 def test_correct_verdict_drops_any_example(fake_claude):
@@ -175,11 +191,19 @@ def test_correct_verdict_drops_any_example(fake_claude):
     assert judge_ads([rec("k1")], TUNING).verdicts[0].example is None
 
 
-def test_example_summary_capped_and_link_cut_to_domain(fake_claude):
-    fake_claude.reply = lambda p: {"verdicts": [verdict("r0", correct=False, example={**EX, "summary": "x" * 300,
-                                   "link": "https://a.com/p?ref=1"})], "proposed_rules": []}
-    ex = judge_ads([rec("k1")], TUNING).verdicts[0].example
-    assert len(ex["summary"]) == 200 and ex["link"] == "https://a.com/"
+def test_example_takes_title_source_link_from_record_and_caps_summary(fake_claude):
+    fake_claude.reply = reply_for(verdict("r0", correct=False, example={**EX, "summary": "x" * 300,
+                                  "title": "Model title", "source": "Model source",
+                                  "link": "https://a.com/p?ref=1"}))
+    ex = judge_ads([rec("k1", title="Record title", source="Record source")], TUNING).verdicts[0].example
+    assert len(ex["summary"]) == 200 and ex["notes"] == "n"
+    assert (ex["title"], ex["source"], ex["link"]) == ("Record title", "Record source", "https://x.com/")
+
+
+def test_empty_example_summary_falls_back_to_text_sent(fake_claude):
+    fake_claude.reply = reply_for(verdict("r0", correct=False, example={**EX, "summary": ""}))
+    ex = judge_ads([rec("k1", text_sent="opening words")], TUNING).verdicts[0].example
+    assert ex["summary"] == "opening words" and ex["notes"] == "n"
 
 
 def test_example_gets_stable_id_and_label_from_verdict(fake_claude):
