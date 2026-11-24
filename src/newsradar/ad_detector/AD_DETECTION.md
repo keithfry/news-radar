@@ -178,7 +178,10 @@ saved; run it again on another day. The pending seed lives in `data/tuning/seed/
   the live model from the Modelfile the snapshot read from Ollama, which is the model
   that was live before the change. A dedup-only day leaves the ad model alone. If the
   snapshot's `applied.json` doesn't parse, or an ads snapshot has no Modelfile, the
-  rollback prints one line saying so, exits with status 1 and changes nothing.
+  rollback prints one line saying so, exits with status 1 and changes nothing. The
+  same holds when an ads rollback can't find the `ollama` command. If the reinstall
+  itself fails, the learned files are already restored. The rollback then prints one
+  line saying so, exits 1, and says to run `--rebuild` or try the rollback again.
 
 The tuner builds a `*-candidate` model to test a change and removes it at the end
 of the run. A bare `ollama create` drops learned data, as the Ongoing Workflow section explains.

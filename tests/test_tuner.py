@@ -539,6 +539,25 @@ def test_rollback_of_an_ads_snapshot_with_a_blank_modelfile_changes_nothing(cfg,
     assert s.ad_examples() == [{"id": "after"}] and fakes.installed == []
 
 
+def test_rollback_without_ollama_changes_nothing(cfg, fakes):
+    s = store(cfg)
+    s.save_ad_examples([{"id": "before"}])
+    s.snapshot(DATE, "FROM /blobs/old\n", ["ads"])
+    s.save_ad_examples([{"id": "after"}])
+    fakes.ollama_missing = True
+    with pytest.raises(tuner.OllamaNotFoundError):
+        rollback(cfg, DATE)
+    assert s.ad_examples() == [{"id": "after"}] and fakes.installed == []
+
+
+def test_dedup_only_rollback_needs_no_ollama(cfg, fakes):
+    s = store(cfg)
+    s.snapshot(DATE, None, ["dedup"])
+    s.save_dedup_cases([{"titles": ["a", "b"], "expected_groups": []}])
+    fakes.ollama_missing = True
+    assert rollback(cfg, DATE) is False and s.dedup_cases() == []
+
+
 def _cli_rollback(cfg, monkeypatch):
     monkeypatch.setattr(sys, "argv", ["newsradar", "tune", "--config", str(cfg.config_path), "--rollback", DATE])
     with pytest.raises(SystemExit) as info:
@@ -1290,3 +1309,25 @@ def test_rebuild_over_the_context_budget_installs_nothing(cfg, fakes, monkeypatc
     with pytest.raises(tuner.ModelfileTooLargeError):
         rebuild_live_model(cfg)
     assert fakes.installed == []
+
+
+def test_cli_rollback_whose_reinstall_fails_says_the_files_were_restored(cfg, fakes, monkeypatch, capsys):
+    s = store(cfg)
+    s.save_ad_examples([{"id": "before"}])
+    s.snapshot(DATE, "FROM /blobs/old\n", ["ads"])
+    s.save_ad_examples([{"id": "after"}])
+    fakes.fail_install_of = LIVE
+    assert _cli_rollback(cfg, monkeypatch) == 1
+    err = capsys.readouterr().err
+    assert "Traceback" not in err and len(err.strip().splitlines()) == 1
+    assert "restored the learned files" in err and f"{LIVE} was not reinstalled" in err
+    assert "--rebuild" in err and "try the rollback again" in err
+    assert s.ad_examples() == [{"id": "before"}]
+
+
+def test_cli_rollback_without_ollama_exits_one_with_one_line(cfg, fakes, monkeypatch, capsys):
+    store(cfg).snapshot(DATE, "FROM /blobs/old\n", ["ads"])
+    fakes.ollama_missing = True
+    assert _cli_rollback(cfg, monkeypatch) == 1
+    err = capsys.readouterr().err
+    assert "Traceback" not in err and len(err.strip().splitlines()) == 1 and "ollama" in err

@@ -660,6 +660,10 @@ def _iso_date(value: str) -> str:
     return value
 
 
+def _one_line(exc: BaseException) -> str:
+    return " ".join(str(exc).split()).rstrip(".")
+
+
 def _run_tune_command(args: argparse.Namespace, parser: argparse.ArgumentParser) -> None:
     from .tuning import tuner
 
@@ -676,7 +680,11 @@ def _run_tune_command(args: argparse.Namespace, parser: argparse.ArgumentParser)
         try:
             reinstalled = tuner.rollback(config, args.rollback)
         except (FileNotFoundError, BadSnapshotError) as e:
-            parser.exit(1, f"rollback failed: {e}\n")
+            parser.exit(1, f"rollback failed: {_one_line(e)}\n")
+        except subprocess.CalledProcessError as e:
+            parser.exit(1, f"rollback restored the learned files from the {args.rollback} snapshot, but "
+                           f"{tuner.live_model_name(config)} was not reinstalled ({_one_line(e)}). Run "
+                           f"`newsradar tune --config {args.config} --rebuild`, or try the rollback again.\n")
         if reinstalled:
             print(f"Restored the {args.rollback} snapshot and reinstalled {tuner.live_model_name(config)}")
         else:

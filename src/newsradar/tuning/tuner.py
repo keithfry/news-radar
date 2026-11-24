@@ -116,8 +116,10 @@ def rollback(config: Config, date: str) -> bool:
     took from the model that was live then. Returns True when it reinstalled.
 
     Raises FileNotFoundError when there is no snapshot, or when an ads
-    snapshot holds no Modelfile, and BadSnapshotError when its applied.json is
-    damaged. Both checks run before any file changes."""
+    snapshot holds no Modelfile, OllamaNotFoundError when an ads snapshot
+    needs a reinstall and there is no ollama, and BadSnapshotError when its
+    applied.json is damaged. These checks run before any file changes. A
+    failed reinstall raises CalledProcessError after the files are restored."""
     store = TuningStore(config.tuning.data_dir)
     snap = store.latest_snapshot(date)
     if snap is None:
@@ -125,6 +127,8 @@ def rollback(config: Config, date: str) -> bool:
     parts = store.snapshot_parts(snap)
     if "ads" in parts and not store.has_modelfile(snap):
         raise FileNotFoundError(f"snapshot {snap} changed the ads but holds no Modelfile; nothing was restored")
+    if "ads" in parts:
+        ollama_bin()  # the reinstall needs it, so find it before any file changes
     text = store.restore(snap, parts)
     if "ads" not in parts:
         return False
