@@ -2,7 +2,8 @@
 
 The flags in ISOLATION_FLAGS stop the call from loading CLAUDE.md, hooks,
 skills, MCP servers and tools. Never add --bare: it ignores the subscription
-login. Each call runs in a fresh empty temporary directory.
+login. BILLING_ENV_VARS are removed from the child's environment so every call
+uses the subscription login, never an API key. Each call runs in a fresh empty temporary directory.
 """
 
 import json
@@ -20,6 +21,16 @@ ISOLATION_FLAGS = [
     "--tools", "",
     "--no-session-persistence",
 ]
+
+# Variables that would make `claude` bill an API key or a cloud account
+# instead of the subscription login. A .env file read by load_config puts
+# its values in os.environ, so they are removed from the child's environment.
+BILLING_ENV_VARS = (
+    "ANTHROPIC_API_KEY",
+    "ANTHROPIC_AUTH_TOKEN",
+    "CLAUDE_CODE_USE_BEDROCK",
+    "CLAUDE_CODE_USE_VERTEX",
+)
 
 
 class ClaudeCallError(RuntimeError):
@@ -54,10 +65,12 @@ def run_claude(
     if effort is not None:
         cmd += ["--effort", effort]
 
+    env = {k: v for k, v in os.environ.items() if k not in BILLING_ENV_VARS}
+
     with tempfile.TemporaryDirectory(prefix="newsradar-claude-") as cwd:
         try:
             proc = subprocess.run(
-                cmd, input=prompt, capture_output=True, text=True, cwd=cwd, timeout=timeout,
+                cmd, input=prompt, capture_output=True, text=True, cwd=cwd, timeout=timeout, env=env,
             )
         except subprocess.TimeoutExpired as e:
             raise ClaudeCallError(f"claude timed out after {timeout}s") from e

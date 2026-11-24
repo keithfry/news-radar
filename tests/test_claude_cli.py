@@ -74,3 +74,15 @@ def test_chat_anthropic_uses_isolated_call(monkeypatch):
     monkeypatch.setattr(llm, "run_claude", lambda p, m, **kw: seen.update(p=p, m=m) or ClaudeResult("ok", None, {}, 0.0))
     assert llm._chat_anthropic("prompt", "claude-haiku-5-5") == "ok"
     assert seen == {"p": "prompt", "m": "claude-haiku-5-5"}
+
+
+@pytest.mark.parametrize("var", ["ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN",
+                                 "CLAUDE_CODE_USE_BEDROCK", "CLAUDE_CODE_USE_VERTEX"])
+def test_billing_overrides_are_removed_so_calls_use_the_subscription(fake_run, monkeypatch, var):
+    monkeypatch.setenv(var, "from-a-dotenv-file")
+    monkeypatch.setenv("HOME_MARKER_FOR_TEST", "kept")
+    run_claude("hi", "m")
+    env = fake_run.kwargs["env"]
+    assert var not in env
+    assert env["HOME_MARKER_FOR_TEST"] == "kept"
+    assert os.environ[var] == "from-a-dotenv-file"  # the caller's environment is untouched
