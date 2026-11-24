@@ -11,6 +11,11 @@ When the ads or dedup gate rejects only because it broke cases from today's
 judge, each of those cases gets a blind second opinion. A case the second
 opinion disputes is dropped from the gate and from the saved change, and the
 gate decides again on the rest.
+
+The ads gate lets a change keep ads from today's judged items, but only when
+every broken case is one of those and the change fixes at least
+KEPT_AD_FIX_RATIO cases per kept ad. News the candidate now removes, and any
+break in a base, learned or seed example, always block.
 """
 
 from __future__ import annotations
@@ -77,6 +82,10 @@ _SAYS_AD = re.compile(r"is_ad[\"'`]?\s*[:=]\s*true", re.IGNORECASE)
 
 # Second opinions on gate blockers are asked only when this many cases or fewer broke.
 MAX_BLOCKERS_FOR_SECOND_OPINION = 2
+
+# The ads gate accepts a change that now keeps some of today's ads only when it
+# fixes at least this many cases per kept ad.
+KEPT_AD_FIX_RATIO = 5
 
 
 class SeedError(RuntimeError):
@@ -322,9 +331,13 @@ class _Report:
         verdict = "accepted" if result.accepted else "rejected"
         lines = [f"{name}: current errors {result.current_errors}, candidate errors "
                  f"{result.candidate_errors}. {verdict.capitalize()}: {result.reason}."]
-        for label, ids in (("Fixed", result.fixed), ("Broken", result.broken)):
+        kept = set(result.kept_ads)
+        for label, ids in (("Fixed", result.fixed), ("Broken", [b for b in result.broken if b not in kept])):
             for case_id in ids:
                 lines.append(f"- {label}: {case_id} ({self.case_titles.get(case_id, '')})")
+        if result.kept_ads:
+            lines += ["", f"Kept ads (allowed: fixes outnumber them {KEPT_AD_FIX_RATIO} to 1 or more):", ""]
+            lines += [f"- Kept ad: {case_id} ({self.case_titles.get(case_id, '')})" for case_id in result.kept_ads]
         return lines
 
     def render(self) -> str:
@@ -733,7 +746,7 @@ class _Tuner:
                 expected, mistake = v.is_ad, not v.correct
             cases.append(Case(id=case_id, title=record.title, text=record.text_sent,
                               expected=expected, today_mistake=mistake,
-                              countable=v.visible_in_excerpt if mistake else True))
+                              countable=v.visible_in_excerpt if mistake else True, today=True))
             today[case_id] = record
         self.rep.case_titles.update({c.id: c.title for c in cases})
         return cases, today, settled
@@ -757,7 +770,7 @@ class _Tuner:
         self._install_candidate(plan)
         cases, today, settled = self._ad_cases(records, judgement, mistakes)
         current_ok, candidate_ok = self._score_ads(cases)
-        result = decide(cases, current_ok, candidate_ok)
+        result = decide(cases, current_ok, candidate_ok, allow_keep_side_ratio=KEPT_AD_FIX_RATIO)
         expected = {c.id: c.expected for c in cases}
 
         def disputes(case_id: str) -> bool | None:
@@ -766,7 +779,8 @@ class _Tuner:
 
         # A case whose dispute the planning second opinion already settled always blocks.
         checks = {cid: disputes for cid in today if cid not in settled}
-        result, gone = self._settle_blockers("Ads", result, cases, current_ok, candidate_ok, checks)
+        result, gone = self._settle_blockers("Ads", result, cases, current_ok, candidate_ok, checks,
+                                             keep_side_ratio=KEPT_AD_FIX_RATIO)
         if not gone:
             return result
         keys = {today[cid].key for cid in gone}
@@ -787,17 +801,18 @@ class _Tuner:
         self._install_candidate(plan)
         remaining = [c for c in cases if c.id not in gone]
         current_ok, candidate_ok = self._score_ads(remaining)
-        return decide(remaining, current_ok, candidate_ok)
+        return decide(remaining, current_ok, candidate_ok, allow_keep_side_ratio=KEPT_AD_FIX_RATIO)
 
     def _settle_blockers(self, name: str, result: GateResult, cases: list[Case], current_ok: list[bool],
                          candidate_ok: list[bool],
-                         checks: dict[str, Callable[[str], bool | None]]) -> tuple[GateResult, set[str]]:
+                         checks: dict[str, Callable[[str], bool | None]],
+                         keep_side_ratio: int | None = None) -> tuple[GateResult, set[str]]:
         """When a gate rejects and every broken case is in checks, ask a blind
         second opinion about each. checks maps a case id to a call returning
         True when the second opinion disputes the case, False when it supports
         the case's label, and None for a malformed reply. A disputed case is
-        dropped and decide runs again on the rest, reusing the ok lists.
-        Returns (result, disputed ids)."""
+        dropped and decide runs again on the rest, reusing the ok lists and
+        keep_side_ratio. Returns (result, disputed ids)."""
         if result.accepted or not result.broken or not all(b in checks for b in result.broken):
             return result, set()
         if len(result.broken) > MAX_BLOCKERS_FOR_SECOND_OPINION:
@@ -821,7 +836,8 @@ class _Tuner:
         if not disputed:
             return result, set()
         keep = [i for i, c in enumerate(cases) if c.id not in disputed]
-        result = decide([cases[i] for i in keep], [current_ok[i] for i in keep], [candidate_ok[i] for i in keep])
+        result = decide([cases[i] for i in keep], [current_ok[i] for i in keep], [candidate_ok[i] for i in keep],
+                        allow_keep_side_ratio=keep_side_ratio)
         return result, disputed
 
     def _score_dedup(self, plan: _DedupPlan) -> tuple[list[DedupCase], list[Case], list[bool], list[bool],

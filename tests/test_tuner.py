@@ -89,6 +89,7 @@ class Fakes:
         self.second_dedup_group_calls = 0
         self.second_pass_break_ids: set[str] = set()  # case ids the candidate gets wrong once rebuilt
         self.candidate_break_ids: set[str] = set()  # case ids the candidate gets wrong
+        self.live_wrong_ids: set[str] = set()  # case ids the live model gets wrong and the candidate fixes
         self.ad_case_ids: list[str] = []
         self.candidate_fix = False
         self.candidate_break_base = False
@@ -165,6 +166,8 @@ class Fakes:
         for c in cases:
             self.ad_case_ids.append(c.id)
             p = (not c.expected) if c.today_mistake else c.expected  # the live gate's behavior
+            if model != CANDIDATE and c.id in self.live_wrong_ids:
+                p = not c.expected
             if model == CANDIDATE:
                 if self.candidate_fix and c.today_mistake:
                     p = c.expected
@@ -940,3 +943,89 @@ def test_report_warns_when_the_live_model_was_not_built_by_the_tuner(cfg, eviden
 def test_candidate_name_drops_the_tag(cfg, configured, live, candidate):
     cfg.models.ad_detector_model = configured
     assert tuner.live_model_name(cfg) == live and tuner.candidate_model_name(cfg) == candidate
+
+
+# ---------- D5: kept ads on today's cases ----------
+
+KEPT_AD = "today:k_ad_aaa"  # "Refer a friend and win", judged an ad
+BASE_IDS = [f"base:{e['id']}" for e in tuner.load_examples(tuner.BASE_EXAMPLES)]
+
+
+def test_kept_today_ad_passes_when_fixes_outnumber_it_five_to_one(cfg, evidence, fakes):
+    fakes.candidate_fixes_today_mistake()
+    fakes.live_wrong_ids = set(BASE_IDS[:4])  # 4 base fixes plus today's mistake
+    fakes.candidate_break_ids = {KEPT_AD}
+    out = run_tune(cfg, DATE, log=lambda s: None)
+    text = out.report_path.read_text()
+    assert out.ads_applied and fakes.second_ad_keys == ["k_ad_aaaaaaaa"]  # only the balancing check
+    assert f"with 1 kept ad: {KEPT_AD} (Refer a friend and win)" in text
+    assert "Kept ads (allowed: fixes outnumber them 5 to 1 or more)" in text
+    assert f"- Kept ad: {KEPT_AD} (Refer a friend and win)" in text
+    assert f"- Broken: {KEPT_AD}" not in text
+
+
+def test_kept_today_ad_rejects_with_fewer_than_five_fixes_per_kept_ad(cfg, evidence, fakes):
+    fakes.candidate_fixes_today_mistake()
+    fakes.live_wrong_ids = set(BASE_IDS[:3])
+    fakes.candidate_break_ids = {KEPT_AD}
+    fakes.second_ad_answers = {"k_ad_aaaaaaaa": [True, True]}  # balancing, then the blocker: an ad
+    out = run_tune(cfg, DATE, log=lambda s: None)
+    assert not out.ads_applied and store(cfg).ad_examples() == []
+    assert "Kept ads" not in out.report_path.read_text()
+
+
+def test_kept_today_ad_with_a_confirmed_removal_rejects(cfg, evidence, fakes):
+    fakes.candidate_fixes_today_mistake()
+    fakes.live_wrong_ids = set(BASE_IDS[:4])
+    fakes.candidate_break_ids = {KEPT_AD, NEWS_CASE}
+    fakes.second_ad_answers = {"k_ad_aaaaaaaa": [True, True], "k_ok_aaaaaaaa": False}  # both labels confirmed
+    out = run_tune(cfg, DATE, log=lambda s: None)
+    assert not out.ads_applied and store(cfg).ad_examples() == []
+    assert "k_ok_aaaaaaaa" in fakes.second_ad_keys
+
+
+def test_kept_today_ad_passes_once_the_removal_is_disputed(cfg, evidence, fakes):
+    fakes.candidate_fixes_today_mistake()
+    fakes.live_wrong_ids = set(BASE_IDS[:4])
+    fakes.candidate_break_ids = {KEPT_AD, NEWS_CASE}
+    fakes.second_ad_answers = {"k_ad_aaaaaaaa": [True, True], "k_ok_aaaaaaaa": True}  # k_ok is an ad
+    out = run_tune(cfg, DATE, log=lambda s: None)
+    assert out.ads_applied and f"- Kept ad: {KEPT_AD}" in out.report_path.read_text()
+
+
+def test_kept_ad_on_a_base_case_rejects_whatever_the_fixes(cfg, evidence, fakes):
+    fakes.candidate_fixes_today_mistake()
+    fakes.live_wrong_ids = set(BASE_IDS[:6])
+    fakes.candidate_break_ids = {BASE_IDS[7]}  # a base ad the candidate now keeps
+    out = run_tune(cfg, DATE, log=lambda s: None)
+    assert not out.ads_applied and fakes.second_ad_keys == ["k_ad_aaaaaaaa"]
+
+
+def test_second_gate_pass_allows_a_kept_today_ad(cfg, evidence, fakes):
+    extra = ad_rec("k_ad2aaaaaaa", "ad", "Webinar: grow your pipeline", source="Vendor")
+    with (evidence / "AI.jsonl").open("a") as f:
+        f.write(json.dumps({"kind": "ad", **asdict(extra)}) + "\n")
+    fakes.candidate_fixes_today_mistake()
+    fakes.live_wrong_ids = set(BASE_IDS[:4])
+    fakes.candidate_break_ids = {KEPT_AD, NEWS_CASE}
+    # Balancing agrees k_ad is an ad; as blockers, both are disputed, so the balancing example drops.
+    fakes.second_ad_answers = {"k_ad_aaaaaaaa": [True, False], "k_ok_aaaaaaaa": True}
+    fakes.second_pass_break_ids = {"today:k_ad2aaa"}  # the rebuilt candidate keeps another ad
+    out = run_tune(cfg, DATE, log=lambda s: None)
+    text = out.report_path.read_text()
+    assert out.ads_applied and fakes.installed.count(CANDIDATE) == 2 and "gated the change again" in text
+    assert len(fakes.second_ad_keys) == 3  # no second opinions on the second pass
+    assert "- Kept ad: today:k_ad2aaa (Webinar: grow your pipeline)" in text
+
+
+def test_second_gate_pass_rejects_a_kept_ad_under_five_to_one(cfg, evidence, fakes):
+    extra = ad_rec("k_ad2aaaaaaa", "ad", "Webinar: grow your pipeline", source="Vendor")
+    with (evidence / "AI.jsonl").open("a") as f:
+        f.write(json.dumps({"kind": "ad", **asdict(extra)}) + "\n")
+    fakes.candidate_fixes_today_mistake()
+    fakes.live_wrong_ids = set(BASE_IDS[:3])
+    fakes.candidate_break_ids = {KEPT_AD}
+    fakes.second_ad_answers = {"k_ad_aaaaaaaa": [True, False]}
+    fakes.second_pass_break_ids = {"today:k_ad2aaa"}
+    out = run_tune(cfg, DATE, log=lambda s: None)
+    assert not out.ads_applied and fakes.installed.count(CANDIDATE) == 2 and LIVE not in fakes.installed

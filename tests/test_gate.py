@@ -136,3 +136,66 @@ def test_predict_dedup_error_raises_gate_error_and_restores_block(monkeypatch):
         assert llm.learned_dedup_examples() == "OLD"
     finally:
         llm.set_learned_dedup_examples("")
+
+
+# ---------- D5: kept ads on today's cases ----------
+
+def kept_ad(id="today:4f5a93d3", title="Richpanel webinar", today=True):
+    """A case labeled an ad that the live model removes and the candidate keeps."""
+    return Case(id=id, title=title, text="x", expected=True, today_mistake=False, countable=True, today=today)
+
+
+def with_fixes(n, *broken):
+    """n fixed cases, the first a countable today mistake, then each broken case."""
+    fixes = [case(f"f{i}", today_mistake=i == 0) for i in range(n)]
+    cases = fixes + list(broken)
+    return cases, [False] * n + [True] * len(broken), [True] * n + [False] * len(broken)
+
+
+def test_kept_ad_on_a_today_case_passes_when_fixes_outnumber_it_five_to_one():
+    cases, cur, cand = with_fixes(16, kept_ad())
+    r = decide(cases, cur, cand, allow_keep_side_ratio=5)
+    assert r.accepted and r.broken == ["today:4f5a93d3"] and r.kept_ads == ["today:4f5a93d3"]
+    assert "1 kept ad" in r.reason and "today:4f5a93d3 (Richpanel webinar)" in r.reason
+    assert r.current_errors == 16 and r.candidate_errors == 1
+
+
+def test_kept_ad_rejects_when_fixes_are_under_five_to_one():
+    cases, cur, cand = with_fixes(4, kept_ad())
+    r = decide(cases, cur, cand, allow_keep_side_ratio=5)
+    assert not r.accepted and r.broken == ["today:4f5a93d3"] and r.kept_ads == []
+    assert "5 to 1" in r.reason
+
+
+def test_kept_ad_with_a_today_case_now_removed_rejects():
+    removed = Case(id="today:news", title="n", text="x", expected=False, today_mistake=False,
+                   countable=True, today=True)
+    cases, cur, cand = with_fixes(16, kept_ad(), removed)
+    r = decide(cases, cur, cand, allow_keep_side_ratio=5)
+    assert not r.accepted and r.broken == ["today:4f5a93d3", "today:news"] and r.kept_ads == []
+
+
+def test_kept_ad_on_a_base_case_rejects():
+    cases, cur, cand = with_fixes(16, kept_ad(id="base:x", today=False))
+    r = decide(cases, cur, cand, allow_keep_side_ratio=5)
+    assert not r.accepted and r.broken == ["base:x"]
+
+
+def test_kept_ad_rejects_when_total_errors_are_not_lower():
+    # With a ratio of 5 fewer errors always follows, so a ratio of 1 checks the errors rule still runs.
+    cases, cur, cand = with_fixes(1, kept_ad())
+    r = decide(cases, cur, cand, allow_keep_side_ratio=1)
+    assert not r.accepted and "fewer errors" in r.reason
+
+
+def test_kept_ad_still_needs_a_countable_today_fix():
+    cases, cur, cand = with_fixes(6, kept_ad())
+    cases[0] = case("f0")  # no longer a today mistake
+    r = decide(cases, cur, cand, allow_keep_side_ratio=5)
+    assert not r.accepted and "no fix" in r.reason
+
+
+def test_kept_ad_blocks_without_the_allowance():
+    cases, cur, cand = with_fixes(16, kept_ad())
+    r = decide(cases, cur, cand)
+    assert not r.accepted and r.broken == ["today:4f5a93d3"] and r.kept_ads == []

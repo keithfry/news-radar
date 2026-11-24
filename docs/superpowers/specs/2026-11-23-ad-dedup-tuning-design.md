@@ -198,6 +198,14 @@ Steps:
    Mistakes the judge marked as not visible in the 1,000-character excerpt
    don't count toward "fixes at least one". They're listed in the report
    as needing a longer input.
+   Keith later relaxed the first rule for one kind of break (D5): one of
+   today's items labeled an ad that the candidate now keeps. That break
+   doesn't block when every broken item is of that kind and the candidate
+   fixes at least 5 items per kept ad. The other two rules still apply.
+   An item the candidate now removes, and any break in a base, learned or
+   seed example, still blocks. The gate checks this after the second
+   opinions on blockers, and again when it re-gates an edited change. The
+   report names each kept ad.
 7. **Gate (duplicates).** Run the current and candidate dedup prompts on
    every labeled duplicate case, using the scan's own model and voting.
    The same three rules apply: no new wrong merge or new miss, at least one

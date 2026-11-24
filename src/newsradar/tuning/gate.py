@@ -2,7 +2,7 @@
 accept a change only when it fixes a real mistake without breaking anything."""
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Callable
 
 from newsradar import llm
@@ -23,6 +23,7 @@ class Case:
     expected: bool
     today_mistake: bool
     countable: bool  # false when the judge said the excerpt doesn't show the answer
+    today: bool = False  # one of today's judged items, not a base, learned or seed example
 
 
 @dataclass
@@ -33,6 +34,7 @@ class GateResult:
     candidate_errors: int
     fixed: list[str]
     broken: list[str]
+    kept_ads: list[str] = field(default_factory=list)  # broken ads the gate allowed through
 
 
 def predict_ads(model: str, cases: list[Case]) -> list[bool]:
@@ -73,9 +75,17 @@ def stabilize(
     return out
 
 
-def decide(cases: list[Case], current_ok: list[bool], candidate_ok: list[bool]) -> GateResult:
+def decide(cases: list[Case], current_ok: list[bool], candidate_ok: list[bool],
+           allow_keep_side_ratio: int | None = None) -> GateResult:
+    """Accept only when nothing breaks, a countable mistake from today is fixed,
+    and the candidate has fewer errors.
+
+    With allow_keep_side_ratio set, a today case labeled an ad that the
+    candidate now keeps doesn't block, as long as every broken case is one of
+    those and there are at least that many fixes per kept ad. Any other break
+    blocks: news the candidate now removes, or any base, learned or seed case."""
     fixed: list[str] = []
-    broken: list[str] = []
+    broken: list[Case] = []
     fixed_today = False
     for c, cur, cand in zip(cases, current_ok, candidate_ok, strict=True):
         if not cur and cand:
@@ -83,19 +93,32 @@ def decide(cases: list[Case], current_ok: list[bool], candidate_ok: list[bool]) 
             if c.today_mistake and c.countable:
                 fixed_today = True
         elif cur and not cand:
-            broken.append(c.id)
+            broken.append(c)
+    broken_ids = [c.id for c in broken]
     current_errors = sum(1 for ok in current_ok if not ok)
     candidate_errors = sum(1 for ok in candidate_ok if not ok)
 
-    if broken:
-        accepted, reason = False, f"regression on {len(broken)} case(s): {', '.join(broken)}"
+    # A broken case labeled an ad means the candidate now keeps it.
+    kept = [c for c in broken if c.today and c.expected] if allow_keep_side_ratio is not None else []
+    only_kept = bool(broken) and len(kept) == len(broken)
+    if broken and not (only_kept and len(fixed) >= allow_keep_side_ratio * len(kept)):
+        reason = f"regression on {len(broken)} case(s): {', '.join(broken_ids)}"
+        if only_kept:
+            reason += (f"; kept ads pass only when fixes outnumber them {allow_keep_side_ratio} to 1 "
+                       f"({len(fixed)} fixed, {len(kept)} kept)")
+        accepted = False
     elif not fixed_today:
         accepted, reason = False, "no fix for a countable mistake from today"
     elif candidate_errors >= current_errors:
         accepted, reason = False, "candidate does not have fewer errors than the current model"
+    elif kept:
+        names = ", ".join(f"{c.id} ({c.title})" for c in kept)
+        noun = "kept ad" if len(kept) == 1 else "kept ads"
+        accepted, reason = True, f"fixed {len(fixed)} case(s), with {len(kept)} {noun}: {names}"
     else:
         accepted, reason = True, f"fixed {len(fixed)} case(s), broke none"
-    return GateResult(accepted, reason, current_errors, candidate_errors, fixed, broken)
+    return GateResult(accepted, reason, current_errors, candidate_errors, fixed, broken_ids,
+                      [c.id for c in kept] if accepted else [])
 
 
 def dedup_case_ok(case: DedupCase, dropped: set[int]) -> bool:
