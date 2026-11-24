@@ -797,7 +797,9 @@ class _Tuner:
             is_ad = self._second_ad(today[case_id])
             return None if is_ad is None else is_ad != expected[case_id]
 
-        # A case whose dispute the planning second opinion already settled always blocks.
+        # A case whose dispute the planning second opinion already settled gets no
+        # second opinion here, so D1 never drops it. It can still pass on the keep
+        # side under the kept-ad allowance; any other break of it blocks.
         checks = {cid: disputes for cid in today if cid not in settled}
         result, gone = self._settle_blockers("Ads", result, cases, current_ok, candidate_ok, checks,
                                              keep_side_ratio=KEPT_AD_FIX_RATIO)
