@@ -199,3 +199,27 @@ def test_kept_ad_blocks_without_the_allowance():
     cases, cur, cand = with_fixes(16, kept_ad())
     r = decide(cases, cur, cand)
     assert not r.accepted and r.broken == ["today:4f5a93d3"] and r.kept_ads == []
+
+
+def test_seed_fixes_do_not_count_toward_the_kept_ad_ratio():
+    # 1 today fix plus 4 seed fixes: 5 fixes in all, but only 1 outside the seed.
+    cases, cur, cand = with_fixes(5, kept_ad())
+    for i in range(1, 5):
+        cases[i] = case(f"seed:s{i}")
+    r = decide(cases, cur, cand, allow_keep_side_ratio=5)
+    assert not r.accepted and r.kept_ads == [] and r.fixed == ["f0", "seed:s1", "seed:s2", "seed:s3", "seed:s4"]
+    assert "1 fixed outside the seed" in r.reason
+
+
+def test_kept_ad_passes_on_five_non_seed_fixes_with_seed_fixes_alongside():
+    cases, cur, cand = with_fixes(8, kept_ad())
+    for i in range(5, 8):
+        cases[i] = case(f"seed:s{i}")
+    r = decide(cases, cur, cand, allow_keep_side_ratio=5)
+    assert r.accepted and r.kept_ads == ["today:4f5a93d3"] and len(r.fixed) == 8
+
+
+def test_seed_fixes_still_count_toward_fewer_errors_without_a_kept_ad():
+    cases = [case("today-1", today_mistake=True), case("seed:a"), case("seed:b")]
+    r = decide(cases, [False, False, False], [True, True, True], allow_keep_side_ratio=5)
+    assert r.accepted and r.fixed == ["today-1", "seed:a", "seed:b"]

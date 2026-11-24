@@ -82,8 +82,10 @@ def decide(cases: list[Case], current_ok: list[bool], candidate_ok: list[bool],
 
     With allow_keep_side_ratio set, a today case labeled an ad that the
     candidate now keeps doesn't block, as long as every broken case is one of
-    those and there are at least that many fixes per kept ad. Any other break
-    blocks: news the candidate now removes, or any base, learned or seed case."""
+    those and there are at least that many fixes per kept ad. Fixes of seed
+    cases don't count toward that ratio: the seed examples are in the
+    candidate's own training block, so fixing them proves little. Any other
+    break blocks: news the candidate now removes, or any base, learned or seed case."""
     fixed: list[str] = []
     broken: list[Case] = []
     fixed_today = False
@@ -101,11 +103,12 @@ def decide(cases: list[Case], current_ok: list[bool], candidate_ok: list[bool],
     # A broken case labeled an ad means the candidate now keeps it.
     kept = [c for c in broken if c.today and c.expected] if allow_keep_side_ratio is not None else []
     only_kept = bool(broken) and len(kept) == len(broken)
-    if broken and not (only_kept and len(fixed) >= allow_keep_side_ratio * len(kept)):
+    ratio_fixes = sum(1 for case_id in fixed if not case_id.startswith("seed:"))
+    if broken and not (only_kept and ratio_fixes >= allow_keep_side_ratio * len(kept)):
         reason = f"regression on {len(broken)} case(s): {', '.join(broken_ids)}"
         if only_kept:
-            reason += (f"; kept ads pass only when fixes outnumber them {allow_keep_side_ratio} to 1 "
-                       f"({len(fixed)} fixed, {len(kept)} kept)")
+            reason += (f"; kept ads pass only when fixes outside the seed outnumber them "
+                       f"{allow_keep_side_ratio} to 1 ({ratio_fixes} fixed outside the seed, {len(kept)} kept)")
         accepted = False
     elif not fixed_today:
         accepted, reason = False, "no fix for a countable mistake from today"

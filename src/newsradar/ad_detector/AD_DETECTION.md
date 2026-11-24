@@ -93,9 +93,10 @@ One kind of break may pass: one of today's items that the judge labeled an ad, w
 the live model removes and the candidate keeps. The change still passes only if every
 broken case is of that kind, it fixes at least 5 cases per kept ad
 (`KEPT_AD_FIX_RATIO` in `tuning/tuner.py`), it has fewer errors in total, and it fixes
-a countable mistake from today. News the candidate now removes, and any break in a
-base, learned or seed example, always blocks. The report lists each kept ad by id and
-title.
+a countable mistake from today. Fixed seed examples don't count toward that ratio,
+because the seed is in the candidate's own training block and fixing it proves
+little. News the candidate now removes, and any break in a base, learned or seed
+example, always blocks. The report lists each kept ad by id and title.
 
 ### The report
 

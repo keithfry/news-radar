@@ -16,8 +16,9 @@ gate decides again on the rest.
 
 The ads gate lets a change keep ads from today's judged items, but only when
 every broken case is one of those and the change fixes at least
-KEPT_AD_FIX_RATIO cases per kept ad. News the candidate now removes, and any
-break in a base, learned or seed example, always block.
+KEPT_AD_FIX_RATIO cases per kept ad. Fixed seed examples don't count toward
+that ratio. News the candidate now removes, and any break in a base, learned
+or seed example, always block.
 """
 
 from __future__ import annotations
@@ -87,7 +88,7 @@ _SAYS_AD = re.compile(r"is_ad[\"'`]?\s*[:=]\s*true", re.IGNORECASE)
 MAX_BLOCKERS_FOR_SECOND_OPINION = 2
 
 # The ads gate accepts a change that now keeps some of today's ads only when it
-# fixes at least this many cases per kept ad.
+# fixes at least this many cases per kept ad, not counting seed examples.
 KEPT_AD_FIX_RATIO = 5
 
 
@@ -344,7 +345,8 @@ class _Report:
             for case_id in ids:
                 lines.append(f"- {label}: {case_id} ({self.case_titles.get(case_id, '')})")
         if result.kept_ads:
-            lines += ["", f"Kept ads (allowed: fixes outnumber them {KEPT_AD_FIX_RATIO} to 1 or more):", ""]
+            lines += ["", f"Kept ads (allowed: fixes outside the seed outnumber them {KEPT_AD_FIX_RATIO} to 1 "
+                      "or more):", ""]
             lines += [f"- Kept ad: {case_id} ({self.case_titles.get(case_id, '')})" for case_id in result.kept_ads]
         return lines
 

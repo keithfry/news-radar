@@ -1043,7 +1043,7 @@ def test_kept_today_ad_passes_when_fixes_outnumber_it_five_to_one(cfg, evidence,
     text = out.report_path.read_text()
     assert out.ads_applied and fakes.second_ad_keys == ["k_ad_aaaaaaaa"]  # only the balancing check
     assert f"with 1 kept ad: {KEPT_AD} (Refer a friend and win)" in text
-    assert "Kept ads (allowed: fixes outnumber them 5 to 1 or more)" in text
+    assert "Kept ads (allowed: fixes outside the seed outnumber them 5 to 1 or more)" in text
     assert f"- Kept ad: {KEPT_AD} (Refer a friend and win)" in text
     assert f"- Broken: {KEPT_AD}" not in text
 
