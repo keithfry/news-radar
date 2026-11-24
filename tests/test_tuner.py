@@ -1357,3 +1357,21 @@ def test_cli_rebuild_failure_prints_one_line_and_exits_one(cfg, fakes, monkeypat
     err = capsys.readouterr().err
     assert "Traceback" not in err and len(err.strip().splitlines()) == 1
     assert err.startswith("rebuild failed:") and expected in err
+
+
+def test_rollback_and_undo_reinstall_without_the_context_guard(cfg, fakes, monkeypatch):
+    # The snapshot holds the model that was live, so it goes back as it was,
+    # even when it would not pass the guard a new build has to pass.
+    monkeypatch.setattr(models, "CONTEXT_SHARE", 0.01)
+    big = models.BASE_MODELFILE.read_text(encoding="utf-8")
+    with pytest.raises(tuner.ModelfileTooLargeError):
+        models.check_context_budget(big, models.CONTEXT_SHARE)
+    s = store(cfg)
+    snap = s.snapshot(DATE, big, ["ads"])
+    assert rollback(cfg, DATE) is True and fakes.modelfiles[LIVE] == big
+
+    fakes.installed.clear()
+    rep = tuner._Report(date=DATE, config_path=cfg.config_path)
+    t = tuner._Tuner(cfg, DATE, rep, tuner.TuneOutcome(False, False, "", s.report_path(DATE)))
+    t._undo(snap, rebuild=True)
+    assert fakes.installed == [LIVE] and fakes.modelfiles[LIVE] == big
