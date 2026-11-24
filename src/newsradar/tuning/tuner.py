@@ -6,8 +6,9 @@ Both gates run before either part is applied. Any failed judge, second
 opinion, candidate build or gate call means nothing is applied for either
 part. The tuner writes only under `[tuning] data_dir` and to the local Ollama
 models, and never runs git. Before the first judge call, a preflight checks
-that the ollama command resolves and that the live model's Modelfile reads. If
-either fails, the run stops there and spends nothing.
+that the ollama command resolves, that the live model's Modelfile reads, and
+that a build from the current learned data passes the context guard. If any
+check fails, the run stops there and spends nothing.
 
 When the ads or dedup gate rejects only because it broke cases from today's
 judge, each of those cases gets a blind second opinion. A case the second
@@ -274,11 +275,14 @@ class _Tuner(_GateSteps):
 
     def _preflight(self) -> None:
         """Check, before any paid judge call, what the gate and the snapshot need
-        later: the ollama command resolves and the live model's Modelfile reads."""
+        later: the ollama command resolves, the live model's Modelfile reads, and
+        a build from the current learned data, not installed, passes the
+        context guard."""
         try:
             ollama_bin()
             installed_modelfile(self.live)
-        except (OllamaNotFoundError, SnapshotError) as exc:
+            _build_text(self.config, self.store.ad_examples(), self.store.ad_rules())
+        except (OllamaNotFoundError, SnapshotError, ModelfileTooLargeError) as exc:
             raise PreflightError(f"{type(exc).__name__}: {exc}") from exc
 
     def _select_ads(self, ads: list[AdRecord]) -> list[AdRecord]:

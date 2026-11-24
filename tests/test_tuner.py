@@ -957,22 +957,28 @@ class _NoJudge:
         raise AssertionError("the preflight should have stopped the run before any judge call")
 
 
-@pytest.mark.parametrize("failure", ["no_ollama", "no_modelfile"])
+PREFLIGHT_MESSAGES = {"no_ollama": "can't find the ollama command", "no_modelfile": "ollama show failed",
+                      "too_large": "ModelfileTooLargeError: the SYSTEM block is about"}
+
+
+@pytest.mark.parametrize("failure", ["no_ollama", "no_modelfile", "too_large"])
 def test_preflight_failure_makes_no_judge_calls_and_applies_nothing(cfg, evidence, fakes, monkeypatch, failure):
     no_ads, no_dedup = _NoJudge(), _NoJudge()
     monkeypatch.setattr(tuner, "judge_ads", no_ads)
     monkeypatch.setattr(tuner, "judge_dedup", no_dedup)
     if failure == "no_ollama":
         fakes.ollama_missing = True
-    else:
+    elif failure == "no_modelfile":
         fakes.show_error = True
+    else:
+        monkeypatch.setattr(models, "CONTEXT_SHARE", 0.01)  # today's learned data already builds too large
     out = run_tune(cfg, DATE, log=lambda s: None)
     text = out.report_path.read_text()
     assert no_ads.calls == 0 and no_dedup.calls == 0 and fakes.second_ad_keys == []
     assert not out.ads_applied and not out.dedup_applied and fakes.installed == []
     assert store(cfg).latest_snapshot(DATE) is None and store(cfg).ad_examples() == []
     assert "Preflight failed" in text and "no judge calls" in text
-    assert ("can't find the ollama command" if failure == "no_ollama" else "ollama show failed") in text
+    assert PREFLIGHT_MESSAGES[failure] in text
     assert "$0.00" in text
 
 
@@ -1293,7 +1299,15 @@ def test_gate_under_the_cap_scores_every_today_record(cfg, evidence, fakes):
 
 
 def test_candidate_over_the_context_budget_applies_nothing(cfg, evidence, fakes, monkeypatch):
-    monkeypatch.setattr(models, "CONTEXT_SHARE", 0.01)
+    real_check = models.check_context_budget
+
+    def candidate_too_large(text, share):
+        # The current learned data fits; only a build with today's new example is too large.
+        if "AI Report issue 42" in text:
+            raise tuner.ModelfileTooLargeError("the SYSTEM block is about 9000 tokens")
+        return real_check(text, share)
+
+    monkeypatch.setattr(models, "check_context_budget", candidate_too_large)
     fakes.candidate_fixes_today_mistake()
     fakes.dedup_cases = [WRONG_MERGE]
     out = run_tune(cfg, DATE, log=lambda s: None)

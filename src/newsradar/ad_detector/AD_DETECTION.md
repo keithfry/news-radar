@@ -189,9 +189,10 @@ of the run. A bare `ollama create` drops learned data, as the Ongoing Workflow s
 The tuner and `newsradar ad-detector install` look for the `ollama` command on PATH,
 then at `/usr/local/bin/ollama`, then at `/opt/homebrew/bin/ollama`, so a launchd job
 with a short PATH still finds it. Before the first judge call, each run checks that
-the command resolves and that `ollama show --modelfile` can read the live model. If
-either check fails, the report says why, the run applies nothing, and no Claude call
-is made. A day with no evidence skips the check, since it makes no paid calls.
+the command resolves, that `ollama show --modelfile` can read the live model, and
+that a build from the current learned data passes the context guard described under
+Learned examples in the Modelfile. The preflight build is not installed. If any check
+fails, the report says why, the run applies nothing, and no Claude call is made. A day with no evidence skips the check, since it makes no paid calls.
 
 ## Ongoing Workflow
 
