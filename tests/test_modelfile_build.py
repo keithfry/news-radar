@@ -52,8 +52,8 @@ def test_empty_rules_leave_markers_adjacent():
     assert LEARNED_RULES_START + LEARNED_RULES_END in text
 
 
-def test_packaged_modelfile_has_ctx_8192_and_markers():
-    assert "PARAMETER num_ctx 8192" in BASE and LEARNED_RULES_START in BASE and LEARNED_RULES_END in BASE
+def test_packaged_modelfile_has_ctx_12288_and_markers():
+    assert "PARAMETER num_ctx 12288" in BASE and LEARNED_RULES_START in BASE and LEARNED_RULES_END in BASE
 
 
 def test_update_modelfile_still_regenerates_examples(tmp_path):
@@ -133,7 +133,7 @@ def test_context_guard_counts_the_training_examples_inside_system():
     except um.ModelfileTooLargeError:
         pass
     else:
-        raise AssertionError("48 long learned examples should not fit in 70% of num_ctx 8192")
+        raise AssertionError("48 long learned examples should not fit in 70% of num_ctx 12288")
 
 
 def test_context_guard_needs_a_num_ctx_and_a_system_block():
@@ -147,4 +147,27 @@ def test_context_guard_needs_a_num_ctx_and_a_system_block():
 
 
 def test_the_committed_base_fits_the_budget():
-    assert um.check_context_budget(build_live_modelfile(BASE, BASE_EXAMPLES, [], "", 24)) < 0.7 * 8192
+    assert um.check_context_budget(build_live_modelfile(BASE, BASE_EXAMPLES, [], "", 24)) < 0.7 * 12288
+
+
+def _realistic(i: int, is_ad: bool) -> dict:
+    """A learned example about the size the tuner saves: a title, a 200-character
+    summary and a short note, about 95 tokens once formatted."""
+    title = f"Example {i}: a company ships a new agent model"
+    summary = (f"Item {i} describes the release, the benchmarks it reports, the price per million "
+               "tokens and when the model reaches the API. It quotes the company and an outside "
+               "researcher about the results.")[:200]
+    return {"id": f"r{i}", "title": title, "summary": summary, "source": "S", "link": "https://x/",
+            "is_ad": is_ad, "ad_type": "sponsor_content" if is_ad else "not_ad",
+            "notes": "The judge's short reason for the label.",
+            "added": f"2026-11-{1 + i % 28:02d}"}
+
+
+def test_base_plus_24_realistic_learned_examples_per_class_fits_the_guard():
+    learned = [_realistic(i, i % 2 == 0) for i in range(48)]
+    text = build_live_modelfile(BASE, BASE_EXAMPLES, learned, "", 24)
+    assert text.count("Input: Title: 'Example ") == 48
+    block = text[text.index("Input: Title: 'Example "):]
+    per_example = len(block) / 48 / um.CHARS_PER_TOKEN
+    assert 85 <= per_example <= 105  # about the 95 tokens per example measured with Ollama
+    assert um.check_context_budget(text) <= 0.7 * 12288

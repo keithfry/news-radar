@@ -2,7 +2,7 @@ FROM qwen3.5:9b
 
 PARAMETER temperature 0.0
 PARAMETER top_p 0.9
-PARAMETER num_ctx 8192
+PARAMETER num_ctx 12288
 
 SYSTEM """
 You are AdDetector. You classify content as advertisement (is_ad: true) or not (is_ad: false).

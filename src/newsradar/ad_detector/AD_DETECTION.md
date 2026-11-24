@@ -132,15 +132,20 @@ candidate then called one of those news items an ad, and the gate rightly blocke
 change. At 12, each new day pushes out examples the model still needs.
 
 Measured with Ollama on 2026-11-24, 38 examples in the Modelfile used 4454 prompt
-tokens of `num_ctx` 8192, about 95 tokens per example. The scan sends the gate the
-title and the first 1,000 characters of the item text, about 270 tokens. Before
-installing a build, the tuner estimates the SYSTEM block, rules and examples included,
-at 4 characters per token. If that is over 70% of the Modelfile's `num_ctx` (5734
-tokens at 8192), it raises `ModelfileTooLargeError` and the run applies nothing. The
-estimate comes out about 5% under Ollama's count: the base build alone estimates at
-about 3140 tokens, so roughly 26 learned examples fit under the limit at 95 tokens
-each. The full 24 of each label (48) would not fit at `num_ctx` 8192. Raise `num_ctx`
-in `AdDetectorModelfile` before the learned set gets there.
+tokens, about 95 tokens per example. The scan sends the gate the title and the first
+1,000 characters of the item text, about 270 tokens. Before installing a build, the
+tuner estimates the SYSTEM block, rules and examples included, at 4 characters per
+token. If that is over 70% of the Modelfile's `num_ctx`, it raises
+`ModelfileTooLargeError`, the report says "The candidate Modelfile is too large for
+num_ctx", and the run applies nothing.
+
+`AdDetectorModelfile` sets `num_ctx` to 12288, up from 8192, so the full 24 of each
+label fit. At 8192 the limit was 5734 tokens and only about 26 learned examples fit.
+At 12288 the limit is 8601 tokens. The base build alone estimates at 3138 tokens.
+With 48 learned examples of the size the tuner saves (a title, a 200-character summary
+and a short note), it estimates at 7255. The estimate comes out about 5% under
+Ollama's count, so the real figure is near 7600 tokens. That leaves about 4,700 tokens
+of `num_ctx` for the item and the reply.
 
 ### The report
 
