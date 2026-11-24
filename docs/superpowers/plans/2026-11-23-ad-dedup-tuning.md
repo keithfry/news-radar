@@ -337,7 +337,7 @@ def test_store_round_trip_snapshot_and_restore(tmp_path):
     assert [e["title"] for e in s.ad_examples()] == ["a"] and s.ad_rules() == "r1"
 
 def test_domain_only():
-    assert domain_only("https://thehustle.co/join?ref=6693394292") == "https://thehustle.co/"
+    assert domain_only("https://thehustle.co/join?ref=1234567890") == "https://thehustle.co/"
     assert domain_only("") == ""
 ```
 
