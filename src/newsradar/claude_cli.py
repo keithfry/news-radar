@@ -44,7 +44,9 @@ def run_claude(
     timeout: int = 900,
 ) -> ClaudeResult:
     claude_bin = shutil.which("claude") or os.path.expanduser("~/.local/bin/claude")
-    cmd = [claude_bin, "-p", prompt, "--model", model, "--output-format", "json", *ISOLATION_FLAGS]
+    # The prompt goes on stdin, where `claude -p` reads it when no prompt
+    # argument is given, so it never shows in the process list.
+    cmd = [claude_bin, "-p", "--model", model, "--output-format", "json", *ISOLATION_FLAGS]
     if system_prompt is not None:
         cmd += ["--system-prompt", system_prompt]
     if json_schema is not None:
@@ -55,7 +57,7 @@ def run_claude(
     with tempfile.TemporaryDirectory(prefix="newsradar-claude-") as cwd:
         try:
             proc = subprocess.run(
-                cmd, capture_output=True, text=True, cwd=cwd, timeout=timeout,
+                cmd, input=prompt, capture_output=True, text=True, cwd=cwd, timeout=timeout,
             )
         except subprocess.TimeoutExpired as e:
             raise ClaudeCallError(f"claude timed out after {timeout}s") from e

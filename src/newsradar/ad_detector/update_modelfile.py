@@ -17,6 +17,7 @@ _REPO_ROOT = _PACKAGE_DIR.parent.parent.parent
 DEFAULT_DATA_PATH = _REPO_ROOT / "tests" / "test_data" / "labeled_examples.json"
 DEFAULT_MODELFILE_PATH = _PACKAGE_DIR / "AdDetectorModelfile"
 MAX_EXAMPLES = 25  # per class
+NOTES_CHARS = 200  # the longest reason an example's Output line carries
 
 TRAINING_SECTION_START = "TRAINING EXAMPLES (memorize these):\n"
 _SECTION_END = '"""\n'
@@ -46,8 +47,9 @@ def format_training_block(examples: list[dict]) -> str:
     lines = [TRAINING_SECTION_START]
     for e in interleaved:
         is_ad = e["is_ad"]
-        reason = e.get("notes", "").strip() or e.get("ad_type", "")
-        label = f'{{"is_ad": {"true" if is_ad else "false"}, "reason": "{reason}"}}'
+        reason = (e.get("notes", "").strip() or e.get("ad_type", ""))[:NOTES_CHARS]
+        # json.dumps keeps a learned note's quotes and newlines from breaking the line.
+        label = f'{{"is_ad": {"true" if is_ad else "false"}, "reason": {json.dumps(reason, ensure_ascii=False)}}}'
         lines.append(
             f"Input: Title: {e['title']!r} | Summary: {e['summary'][:200]!r}\n"
             f"Output: {label}\n"

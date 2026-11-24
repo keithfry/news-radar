@@ -17,6 +17,7 @@ class _FakeRun:
 
     def __call__(self, cmd, **kwargs):
         self.calls.append((cmd, kwargs.get("cwd")))
+        self.kwargs = kwargs
         return subprocess.CompletedProcess(cmd, self.returncode, self.stdout, "")
 
 
@@ -38,6 +39,13 @@ def test_command_has_isolation_flags_and_options(fake_run):
     assert cmd[cmd.index("--system-prompt") + 1] == "sys"
     assert json.loads(cmd[cmd.index("--json-schema") + 1]) == {"type": "object"}
     assert cmd[cmd.index("--output-format") + 1] == "json"
+
+
+def test_prompt_goes_on_stdin_not_argv(fake_run):
+    run_claude("SECRET PROMPT TEXT", "m", system_prompt="sys")
+    cmd, _ = fake_run.calls[0]
+    assert "SECRET PROMPT TEXT" not in cmd and fake_run.kwargs["input"] == "SECRET PROMPT TEXT"
+    assert cmd[1] == "-p" and cmd[2] == "--model"  # no positional prompt after -p
 
 
 def test_runs_in_an_empty_temp_dir(fake_run):

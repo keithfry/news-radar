@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import importlib
+import json
 from pathlib import Path
 
 from newsradar.ad_detector.update_modelfile import (
     LEARNED_RULES_END,
     LEARNED_RULES_START,
+    TRAINING_SECTION_START,
     build_live_modelfile,
+    format_training_block,
     load_examples,
 )
 
@@ -63,3 +66,32 @@ def test_update_modelfile_still_regenerates_examples(tmp_path):
     out = mf.read_text()
     assert "'Only One Title'" in out and out.count("Input: Title:") == 1
     assert LEARNED_RULES_START in out
+
+
+def _old_format(examples):
+    """format_training_block as it was before notes were escaped."""
+    ads = [e for e in examples if e["is_ad"]]
+    not_ads = [e for e in examples if not e["is_ad"]]
+    interleaved = []
+    for i in range(max(len(ads), len(not_ads))):
+        interleaved += ads[i:i + 1] + not_ads[i:i + 1]
+    lines = [TRAINING_SECTION_START]
+    for e in interleaved:
+        reason = e.get("notes", "").strip() or e.get("ad_type", "")
+        label = f'{{"is_ad": {"true" if e["is_ad"] else "false"}, "reason": "{reason}"}}'
+        lines.append(f"Input: Title: {e['title']!r} | Summary: {e['summary'][:200]!r}\nOutput: {label}\n")
+    return "\n".join(lines)
+
+
+def test_base_examples_render_byte_for_byte_as_before():
+    assert format_training_block(BASE_EXAMPLES) == _old_format(BASE_EXAMPLES)
+
+
+def test_learned_note_is_capped_and_escaped_as_json():
+    note = 'He said "buy" \\ now\nand ' + "x" * 300
+    text = format_training_block([dict(ex("t", is_ad=False), notes=note)])
+    output = next(line for line in text.splitlines() if line.startswith("Output: "))
+    label = json.loads(output.removeprefix("Output: "))
+    assert label == {"is_ad": False, "reason": note[:200]}
+    live = build_live_modelfile(BASE, BASE_EXAMPLES, [dict(ex("t", is_ad=False), notes=note)], "", 12)
+    assert live.count('"""') == BASE.count('"""')
