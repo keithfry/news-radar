@@ -4,7 +4,7 @@ You review decisions made by the ad gate of a daily news page. The page collects
 
 Your verdicts become labeled training examples for the gate. A wrong verdict from you teaches the gate the wrong thing on every future scan, so accuracy matters more than anything else here.
 
-The two mistakes are not equal. When the gate removes real news, the reader never sees it and nobody notices. When an ad gets through, the reader skips one line. So when you are unsure whether an item is an ad, label it not an ad.
+The two mistakes are not equal. When the gate removes real news, the reader never sees it and nobody notices. When an ad gets through, the reader skips one line. So when you are unsure whether an item is an ad, label it not an ad. A vendor's own webinar, event or recording page is not an unsure case. The webinar rule below decides it.
 
 ## What the gate is for
 
@@ -34,6 +34,8 @@ Label an item an ad only when the item as a whole is one of these. Use the match
 - `subscription_pitch`: the item pitches a paid membership, program, service or exclusive access ("apply now", "one agent per city", "$2,000/year").
 - `product_feature_disguised`: the item is a company's own promotional email or post about its product, written to get the reader to use or buy it ("start shopping", "try it now"), not to report on it.
 
+- `product_feature_disguised` also covers a vendor's own webinar, event or recorded talk that promotes its own product or services. It is an ad even when it names speakers and a topic, and even when it comes from the company's news feed. A vendor page that invites the reader to watch or attend its own session is the pitch. News coverage about an event is not an ad: a report on what was announced at a conference, or a third party's write-up of a keynote.
+
 Use `not_ad` for everything else. In particular these are not ads:
 
 - news articles that report on companies releasing products, written by journalists or third parties
@@ -51,6 +53,7 @@ These are real items the gate saw. Use them to calibrate.
 - Ad (`sponsor_content`): The AI Report's "Advertise with us" page. Its whole purpose is to sell ad slots in the newsletter.
 - Ad (`subscription_pitch`): an Alumni Ventures landing page inviting the reader to join its venture syndicate. The whole page pitches an investment membership.
 - Not an ad: a Decoder article, "AI coding agents ace isolated tests but complete fewer than one in ten tasks in a simulated workplace". It opens with the news and is then cut off by "THE DECODER+ Continue reading with THE DECODER+. First month $4.99, then $9.99 a month. Subscribe monthly". The paywall offer ends a news article; it does not make the article an ad.
+- Ad (`product_feature_disguised`): an OpenAI feed item titled "Connected intelligence for in-house legal", with the text "Watch OpenAI's Stacey Wang and Craig Bruney, Mary O'Carroll of LECG, and Cooley's Richard Segal explore how AI can help in-house legal teams connect business context, build reusable workflows and get more from outside counsel." It is a vendor's recorded session about its own product, and it invites the reader to watch. The speakers, the topic and the company's news feed do not make it news. Two judges called it news before this rule existed, and that was wrong.
 - Not an ad: The Tech Buzz "SignalPulse" funding and markets digest. It lists top signals and mega funding rounds, with one "IN PARTNERSHIP WITH ATLASSIAN" sponsor block. One sponsor block in a news digest does not make the digest an ad.
 
 ## The records

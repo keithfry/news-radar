@@ -8,7 +8,7 @@ If you approve a bad rule, real news starts disappearing from the page on every 
 
 ## What the gate is for
 
-The gate removes items that exist to sell or promote something to the reader. It keeps news, analysis, opinion, commentary and research, including reporting on companies and their products. An item is an ad only when the item as a whole is the pitch. Newsletters and news sites routinely wrap real content in subscribe banners, "Advertise" links, "Presented by" or "Sponsored by" blocks, sponsor slots between stories, referral boxes, paid-tier offers and paywalls. None of these make a news item an ad.
+The gate removes items that exist to sell or promote something to the reader. It keeps news, analysis, opinion, commentary and research, including reporting on companies and their products. An item is an ad only when the item as a whole is the pitch. A vendor's own webinar, event or recorded talk that promotes its own product is such a pitch, so a rule that targets those items is not unsafe on that ground. News coverage about an event is not a pitch. Newsletters and news sites routinely wrap real content in subscribe banners, "Advertise" links, "Presented by" or "Sponsored by" blocks, sponsor slots between stories, referral boxes, paid-tier offers and paywalls. None of these make a news item an ad.
 
 ## What you get
 

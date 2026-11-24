@@ -37,6 +37,7 @@ and linked articles are checked once, not once per topic.
 | Advertising pitch | "advertise in", "reach X million", "20.1x ROI" |
 | Subscription product | "one agent per city", "apply now", "$X/year", "weekly leads" |
 | Product feature pitch | imperative verbs targeting reader ("start shopping", "try it") |
+| Vendor webinar or event | a vendor's own webinar, event or recorded talk promoting its product ("watch", "register", speakers and a topic); coverage by a third party is news |
 
 ## Labeled Dataset
 

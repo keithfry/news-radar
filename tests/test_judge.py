@@ -512,3 +512,8 @@ def test_second_opinion_rule_bad_id_rejects_the_rule_without_raising(fake_claude
                                   "second_opinion_rule.md"])
 def test_prompts_load_from_package(name):
     assert len(judge._prompt(name)) > 500
+
+
+def test_ad_prompts_agree_that_vendor_webinars_are_ads():
+    for name in ("judge_ads.md", "second_opinion.md"):
+        assert "webinar" in judge._prompt(name).lower(), name
