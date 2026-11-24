@@ -1,5 +1,6 @@
 """Tests for `newsradar tune`. Every judge, gate, Ollama build and `ollama rm`
-call is replaced with a fake in newsradar.tuning.tuner; nothing real runs."""
+call is replaced with a fake in the tuner, gating or models module, where the
+call is made; nothing real runs."""
 
 from __future__ import annotations
 
@@ -14,7 +15,7 @@ import pytest
 
 from newsradar import cli
 from newsradar.config import load_config
-from newsradar.tuning import judge, tuner
+from newsradar.tuning import gating, judge, models, tuner
 from newsradar.tuning.evidence import AdRecord, DedupRecord
 from newsradar.tuning.gate import GateError
 from newsradar.tuning.judge import AdJudgement, AdVerdict, DedupCase, JudgeError, ProposedRule
@@ -234,9 +235,9 @@ def fakes(monkeypatch):
 
     monkeypatch.setattr(subprocess, "run", no_real_subprocess)
     monkeypatch.setattr(tuner, "ollama_bin", f.ollama_bin)
-    monkeypatch.setattr(tuner, "predict_ads", f.predict_ads)
-    monkeypatch.setattr(tuner, "predict_dedup", f.predict_dedup)
-    monkeypatch.setattr(tuner, "install_ad_detector_model", f.install)
+    monkeypatch.setattr(gating, "predict_ads", f.predict_ads)
+    monkeypatch.setattr(gating, "predict_dedup", f.predict_dedup)
+    monkeypatch.setattr(models, "install_ad_detector_model", f.install)
     monkeypatch.setattr(tuner, "remove_ollama_model", f.remove)
     monkeypatch.setattr(tuner, "installed_modelfile", f.show)
     return f
@@ -274,8 +275,8 @@ def test_unjudged_record_is_counted_and_gets_no_case(cfg, evidence, fakes, monke
     fakes.unjudged_keys = {"k_ad_aaaaaaaa"}
     fakes.candidate_fixes_today_mistake()
     seen: list[str] = []
-    real_predict = tuner.predict_ads
-    monkeypatch.setattr(tuner, "predict_ads", lambda model, cases: seen.extend(c.id for c in cases)
+    real_predict = gating.predict_ads
+    monkeypatch.setattr(gating, "predict_ads", lambda model, cases: seen.extend(c.id for c in cases)
                         or real_predict(model, cases))
     text = run_tune(cfg, DATE, log=lambda s: None).report_path.read_text()
     assert "Records skipped: 1" in text and "Ad-gate decisions judged: 2." in text
@@ -881,8 +882,8 @@ def test_installed_modelfile_runs_ollama_show(monkeypatch):
         calls.append(cmd)
         return subprocess.CompletedProcess(cmd, 0, "FROM /blobs/x\nSYSTEM hi\n", "")
 
-    monkeypatch.setattr(tuner.subprocess, "run", fake_run)
-    monkeypatch.setattr(tuner, "ollama_bin", lambda: "/usr/local/bin/ollama")
+    monkeypatch.setattr(models.subprocess, "run", fake_run)
+    monkeypatch.setattr(models, "ollama_bin", lambda: "/usr/local/bin/ollama")
     assert tuner.installed_modelfile(LIVE) == "FROM /blobs/x\nSYSTEM hi\n"
     assert calls == [["/usr/local/bin/ollama", "show", "--modelfile", LIVE]]
 
@@ -891,15 +892,15 @@ def test_installed_modelfile_without_ollama_raises_snapshot_error(monkeypatch):
     def missing():
         raise tuner.OllamaNotFoundError("can't find the ollama command")
 
-    monkeypatch.setattr(tuner, "ollama_bin", missing)
+    monkeypatch.setattr(models, "ollama_bin", missing)
     with pytest.raises(tuner.SnapshotError, match="can't find the ollama command"):
         tuner.installed_modelfile(LIVE)
 
 
 def test_remove_ollama_model_runs_the_resolved_binary(monkeypatch):
     calls = []
-    monkeypatch.setattr(tuner.subprocess, "run", lambda cmd, **kw: calls.append(cmd))
-    monkeypatch.setattr(tuner, "ollama_bin", lambda: "/opt/homebrew/bin/ollama")
+    monkeypatch.setattr(models.subprocess, "run", lambda cmd, **kw: calls.append(cmd))
+    monkeypatch.setattr(models, "ollama_bin", lambda: "/opt/homebrew/bin/ollama")
     tuner.remove_ollama_model(CANDIDATE)
     assert calls == [["/opt/homebrew/bin/ollama", "rm", CANDIDATE]]
 
@@ -911,8 +912,8 @@ def test_remove_ollama_model_ignores_a_missing_ollama(monkeypatch):
     def no_run(*a, **kw):
         raise AssertionError("subprocess.run called")
 
-    monkeypatch.setattr(tuner, "ollama_bin", missing)
-    monkeypatch.setattr(tuner.subprocess, "run", no_run)
+    monkeypatch.setattr(models, "ollama_bin", missing)
+    monkeypatch.setattr(models.subprocess, "run", no_run)
     tuner.remove_ollama_model(CANDIDATE)  # no raise
 
 
@@ -965,7 +966,7 @@ def test_installed_modelfile_failure_raises_snapshot_error(monkeypatch, outcome)
             raise subprocess.CalledProcessError(1, cmd, "", "model not found")
         return subprocess.CompletedProcess(cmd, 0, "  \n", "")
 
-    monkeypatch.setattr(tuner.subprocess, "run", fake_run)
+    monkeypatch.setattr(models.subprocess, "run", fake_run)
     with pytest.raises(tuner.SnapshotError):
         tuner.installed_modelfile(LIVE)
 
@@ -1075,7 +1076,7 @@ def test_candidate_name_drops_the_tag(cfg, configured, live, candidate):
 # ---------- D5: kept ads on today's cases ----------
 
 KEPT_AD = "today:k_ad_aaa"  # "Refer a friend and win", judged an ad
-BASE_IDS = [f"base:{e['id']}" for e in tuner.load_examples(tuner.BASE_EXAMPLES)]
+BASE_IDS = [f"base:{e['id']}" for e in models.load_examples(models.BASE_EXAMPLES)]
 
 
 def test_kept_today_ad_passes_when_fixes_outnumber_it_five_to_one(cfg, evidence, fakes):
@@ -1207,9 +1208,9 @@ def test_gate_samples_passed_records_up_to_the_cap_and_keeps_mistakes_and_remova
 
 def test_gate_sample_is_seeded_by_date():
     keys = [f"k_n{i:02d}aaaaaa" for i in range(40)]
-    a = tuner._sample_passed(keys, 5, "2026-11-23")
-    assert a == tuner._sample_passed(list(reversed(keys)), 5, "2026-11-23") and len(a) == 5
-    assert a != tuner._sample_passed(keys, 5, "2026-11-24")
+    a = gating._sample_passed(keys, 5, "2026-11-23")
+    assert a == gating._sample_passed(list(reversed(keys)), 5, "2026-11-23") and len(a) == 5
+    assert a != gating._sample_passed(keys, 5, "2026-11-24")
 
 
 def test_mistakes_and_removals_are_scored_even_past_the_cap(cfg, evidence, fakes):
@@ -1243,7 +1244,7 @@ def test_gate_under_the_cap_scores_every_today_record(cfg, evidence, fakes):
 
 
 def test_candidate_over_the_context_budget_applies_nothing(cfg, evidence, fakes, monkeypatch):
-    monkeypatch.setattr(tuner, "CONTEXT_SHARE", 0.01)
+    monkeypatch.setattr(models, "CONTEXT_SHARE", 0.01)
     fakes.candidate_fixes_today_mistake()
     fakes.dedup_cases = [WRONG_MERGE]
     out = run_tune(cfg, DATE, log=lambda s: None)
@@ -1253,7 +1254,7 @@ def test_candidate_over_the_context_budget_applies_nothing(cfg, evidence, fakes,
 
 
 def test_rebuild_over_the_context_budget_installs_nothing(cfg, fakes, monkeypatch):
-    monkeypatch.setattr(tuner, "CONTEXT_SHARE", 0.01)
+    monkeypatch.setattr(models, "CONTEXT_SHARE", 0.01)
     with pytest.raises(tuner.ModelfileTooLargeError):
         rebuild_live_model(cfg)
     assert fakes.installed == []

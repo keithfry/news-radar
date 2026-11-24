@@ -94,7 +94,7 @@ removes and the candidate keeps. A today item's label is the judge's verdict, ex
 when the second opinion disputed the judge's call on it. That case is settled, and its
 label is the gate's own verdict. The change still passes only if every
 broken case is of that kind, it fixes at least 5 cases per kept ad
-(`KEPT_AD_FIX_RATIO` in `tuning/tuner.py`), it has fewer errors in total, and it fixes
+(`KEPT_AD_FIX_RATIO` in `tuning/gate.py`), it has fewer errors in total, and it fixes
 a countable mistake from today. Fixed seed examples don't count toward that ratio,
 because the seed is in the candidate's own training block and fixing it proves
 little. News the candidate now removes, and any break in a base, learned or seed

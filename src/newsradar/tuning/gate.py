@@ -11,6 +11,11 @@ from newsradar.tuning.judge import DedupCase
 
 
 
+# The ads gate accepts a change that now keeps some of today's ads only when it
+# fixes at least this many cases per kept ad, not counting seed examples.
+KEPT_AD_FIX_RATIO = 5
+
+
 class GateError(Exception):
     """A model call failed, so the gate cannot decide. The caller applies nothing."""
 

@@ -23,48 +23,30 @@ or seed example, always block.
 
 from __future__ import annotations
 
-import hashlib
 import json
 import re
 import shutil
 import subprocess
-from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
 
-from newsradar.ad_detector.install import install_ad_detector_model
 from newsradar.ad_detector.update_modelfile import (
-    DEFAULT_DATA_PATH,
-    DEFAULT_MODELFILE_PATH,
     LEARNED_RULES_END,
     LEARNED_RULES_START,
-    CONTEXT_SHARE,
     TRAINING_SECTION_START,
     ModelfileTooLargeError,
-    build_live_modelfile,
-    check_context_budget,
-    load_examples,
 )
 from newsradar.claude_cli import ClaudeCallError
 from newsradar.config import Config
 from newsradar.ollama_cli import OllamaNotFoundError, ollama_bin
 from newsradar.tuning.evidence import AdRecord, load_day, prune_evidence
-from newsradar.tuning.gate import (
-    Case,
-    GateError,
-    GateResult,
-    decide,
-    dedup_case_ok,
-    predict_ads,
-    predict_dedup,
-    stabilize,
-)
+from newsradar.tuning.gate import KEPT_AD_FIX_RATIO, GateError
+from newsradar.tuning.gating import MAX_BLOCKERS_FOR_SECOND_OPINION, _GateSteps
 from newsradar.tuning.judge import (
     AD_TYPES,
     RULE_CHECK_ITEMS,
     SUMMARY_CHARS,
     AdJudgement,
-    AdVerdict,
     DedupCase,
     JudgeError,
     ProposedRule,
@@ -76,10 +58,24 @@ from newsradar.tuning.judge import (
     second_opinion_dedup_groups,
     second_opinion_rule,
 )
+from newsradar.tuning.models import (
+    SnapshotError,
+    _build_dir,
+    _build_text,
+    _install,
+    candidate_model_name,
+    installed_modelfile,
+    live_model_name,
+    remove_ollama_model,
+)
+from newsradar.tuning.report import TuneOutcome, _AdPlan, _DedupPlan, _Mistake, _Report
 from newsradar.tuning.store import AD_EXAMPLES_FILE, AD_RULES_FILE, TuningStore, domain_only
 
-BASE_MODELFILE = DEFAULT_MODELFILE_PATH
-BASE_EXAMPLES = DEFAULT_DATA_PATH
+__all__ = [
+    "KEPT_AD_FIX_RATIO", "MAX_BLOCKERS_FOR_SECOND_OPINION", "ModelfileTooLargeError", "OllamaNotFoundError",
+    "PreflightError", "SeedError", "SnapshotError", "TuneOutcome", "candidate_model_name", "installed_modelfile",
+    "live_model_name", "load_seed", "rebuild_live_model", "remove_ollama_model", "rollback", "run_tune",
+]
 
 # Text that would end the SYSTEM block or confuse the marker search in
 # build_live_modelfile, so it must never reach the learned files.
@@ -88,20 +84,10 @@ _FORBIDDEN = ('"""', LEARNED_RULES_START.strip(), LEARNED_RULES_END.strip(), TRA
 # A rule that tells the gate to output is_ad: true makes it remove more, whatever leaning it claims.
 _SAYS_AD = re.compile(r"is_ad[\"'`]?\s*[:=]\s*true", re.IGNORECASE)
 
-# Second opinions on gate blockers are asked only when this many cases or fewer broke.
-MAX_BLOCKERS_FOR_SECOND_OPINION = 2
-
-# The ads gate accepts a change that now keeps some of today's ads only when it
-# fixes at least this many cases per kept ad, not counting seed examples.
-KEPT_AD_FIX_RATIO = 5
-
 
 class SeedError(RuntimeError):
     """The --include-seed folder is missing or holds files the tuner can't read."""
 
-
-class SnapshotError(RuntimeError):
-    """`ollama show --modelfile` failed, so the live model can't be snapshotted."""
 
 
 class PreflightError(RuntimeError):
@@ -113,87 +99,6 @@ class PreflightError(RuntimeError):
 _RUN_ERRORS = (JudgeError, ClaudeCallError, GateError, SeedError, SnapshotError,
                ModelfileTooLargeError, subprocess.CalledProcessError, OSError)
 
-
-@dataclass
-class TuneOutcome:
-    ads_applied: bool
-    dedup_applied: bool
-    summary: str
-    report_path: Path
-
-
-def live_model_name(config: Config) -> str:
-    return config.models.ad_detector_model.removeprefix("ollama/")
-
-
-def candidate_model_name(config: Config) -> str:
-    """`<live>-candidate`, with any `:tag` on the live name dropped first."""
-    name = live_model_name(config)
-    base, sep, tag = name.rpartition(":")
-    if sep and "/" not in tag:
-        name = base
-    return f"{name}-candidate"
-
-
-def installed_modelfile(name: str) -> str:
-    """The Modelfile of the installed model, from `ollama show --modelfile`.
-    Raises SnapshotError when the call fails or prints nothing."""
-    try:
-        proc = subprocess.run([ollama_bin(), "show", "--modelfile", name], capture_output=True, text=True,
-                              check=True, timeout=120)
-    except subprocess.CalledProcessError as exc:
-        raise SnapshotError(f"ollama show --modelfile {name} exited {exc.returncode}: "
-                            f"{(exc.stderr or '').strip()[:300]}") from exc
-    except (OSError, subprocess.SubprocessError) as exc:
-        raise SnapshotError(f"ollama show --modelfile {name} failed: {exc}") from exc
-    if not proc.stdout.strip():
-        raise SnapshotError(f"ollama show --modelfile {name} printed nothing")
-    return proc.stdout
-
-
-def remove_ollama_model(name: str) -> None:
-    """Run `ollama rm`, ignoring every failure (the model may not exist)."""
-    try:
-        subprocess.run([ollama_bin(), "rm", name], capture_output=True, text=True, check=False, timeout=120)
-    except (OSError, subprocess.SubprocessError):
-        pass
-
-
-def _build_text(config: Config, examples: list[dict], rules: str) -> str:
-    """Build a Modelfile from base plus the given learned data. Raises
-    ModelfileTooLargeError, before anything is installed, when its SYSTEM
-    block would fill more than CONTEXT_SHARE of num_ctx."""
-    text = build_live_modelfile(
-        BASE_MODELFILE.read_text(encoding="utf-8"),
-        load_examples(BASE_EXAMPLES),
-        examples,
-        rules,
-        config.tuning.learned_examples_per_class,
-    )
-    check_context_budget(text, CONTEXT_SHARE)
-    return text
-
-
-def _sample_passed(keys: list[str], n: int, date: str) -> set[str]:
-    """n of the keys, picked by a hash seeded with date, so every run on that
-    date picks the same ones whatever order the keys come in."""
-    order = sorted(keys, key=lambda k: hashlib.sha256(f"{date}:{k}".encode("utf-8")).hexdigest())
-    return set(order[:max(n, 0)])
-
-
-def _build_dir(config: Config) -> Path:
-    return TuningStore(config.tuning.data_dir).root / "build"
-
-
-def _install(config: Config, text: str, model_name: str) -> None:
-    """Write text to a temporary Modelfile under data_dir, run `ollama create`, delete the file."""
-    path = _build_dir(config) / f"{model_name}.Modelfile"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text, encoding="utf-8")
-    try:
-        install_ad_detector_model(path, model_name)
-    finally:
-        path.unlink(missing_ok=True)
 
 
 def rebuild_live_model(config: Config, model_name: str | None = None) -> str:
@@ -291,182 +196,9 @@ def _modelfile_problem(*texts: str) -> str | None:
     return None
 
 
-# ---------- run state and report ----------
-
-@dataclass
-class _Mistake:
-    record: AdRecord
-    verdict: AdVerdict
-    second: bool | None  # None when no second opinion was needed
-    unusable: bool = False  # the second opinion's reply was malformed, counted as a disagreement
-
-
-@dataclass
-class _AdPlan:
-    examples: list[dict]  # the full candidate learned list
-    rules: str
-    new_examples: list[dict]
-    example_keys: dict[str, str] = field(default_factory=dict)  # new example id -> its record key
-    rules_changed: bool = False
-
-
-@dataclass
-class _DedupPlan:
-    cases: list[dict]  # the full candidate learned list
-    new_count: int
-
-
-@dataclass
-class _Report:
-    date: str
-    config_path: Path
-    no_evidence: bool = False
-    bad_lines: int = 0
-    judged_ads: int = 0
-    over_cap: int = 0
-    dedup_batches: int = 0
-    dedup_skipped: int = 0
-    ad_skipped: int = 0
-    ad_shifted: int = 0  # part of ad_skipped: the reply's correct contradicted the gate's record
-    cost: float = 0.0
-    second_calls: int = 0
-    error: str = ""
-    mistakes: list[_Mistake] = field(default_factory=list)
-    example_lines: list[str] = field(default_factory=list)
-    rule_lines: list[str] = field(default_factory=list)
-    dedup_lines: list[str] = field(default_factory=list)
-    ad_gate: GateResult | None = None
-    sample_line: str = ""  # how many of today's passed records the ads gate left out
-    dedup_gate: GateResult | None = None
-    case_titles: dict[str, str] = field(default_factory=dict)
-    apply_lines: list[str] = field(default_factory=list)
-    cleanup_lines: list[str] = field(default_factory=list)
-    blocker_lines: list[str] = field(default_factory=list)
-    seed_dir: Path | None = None
-    seed_lines: list[str] = field(default_factory=list)
-    ads_status: str = "no change proposed"
-    live_untuned: bool = False  # no snapshot yet, so the live model wasn't built by the tuner
-    undo_status: str = ""
-    dedup_status: str = "no change proposed"
-
-    def summary(self, path: Path) -> str:
-        if self.no_evidence:
-            return f"tune {self.date}: no evidence, nothing to tune; report {path}"
-        if self.error:
-            return f"tune {self.date}: applied nothing ({self.error}); report {path}"
-        return (f"tune {self.date}: ads {self.ads_status}, dedup {self.dedup_status}, "
-                f"judge cost ${self.cost:.2f}; report {path}")
-
-    def _gate_lines(self, name: str, result: GateResult | None, status: str) -> list[str]:
-        if result is None:
-            return [f"{name}: not run ({status})."]
-        verdict = "accepted" if result.accepted else "rejected"
-        lines = [f"{name}: current errors {result.current_errors}, candidate errors "
-                 f"{result.candidate_errors}. {verdict.capitalize()}: {result.reason}."]
-        kept = set(result.kept_ads)
-        for label, ids in (("Fixed", result.fixed), ("Broken", [b for b in result.broken if b not in kept])):
-            for case_id in ids:
-                lines.append(f"- {label}: {case_id} ({self.case_titles.get(case_id, '')})")
-        if result.kept_ads:
-            lines += ["", f"Kept ads (allowed: fixes outside the seed outnumber them {KEPT_AD_FIX_RATIO} to 1 "
-                      "or more):", ""]
-            lines += [f"- Kept ad: {case_id} ({self.case_titles.get(case_id, '')})" for case_id in result.kept_ads]
-        return lines
-
-    def render(self) -> str:
-        if self.no_evidence:
-            extra = f" ({self.bad_lines} bad evidence lines skipped)" if self.bad_lines else ""
-            seed = f" The seed in {self.seed_dir} was not used." if self.seed_dir else ""
-            return f"Tuning report {self.date}: no evidence for this day, nothing to tune{extra}.{seed}\n"
-
-        out = [f"# Tuning report {self.date}", ""]
-        if self.error:
-            out += [f"Applied nothing. {self.error}", ""]
-        else:
-            out += [f"Ads: {self.ads_status}. Dedup: {self.dedup_status}.", ""]
-
-        out += ["## Evidence", "",
-                f"- Ad-gate decisions judged: {self.judged_ads}.",
-                f"- Decisions over the cap of items per run: {self.over_cap}.",
-                f"- Dedup batches judged: {self.dedup_batches}.",
-                f"- Bad evidence lines skipped: {self.bad_lines}.", ""]
-
-        out += ["## Ad gate mistakes", ""]
-        if not self.mistakes:
-            out.append("None found.")
-        for m in self.mistakes:
-            label = "an ad" if m.verdict.is_ad else "not an ad"
-            if m.unusable:
-                second = "no usable reply, counted as a disagreement, so the change was dropped"
-            elif m.second is None:
-                second = "not needed, the change keeps more"
-            else:
-                second = "agreed" if m.second else "disagreed, so the change was dropped"
-            out.append(f'- "{m.record.title}" ({m.record.source}). Gate verdict: {m.record.verdict}. '
-                       f"Judge: {label} ({m.verdict.ad_type}), {m.verdict.reason}. Second opinion: {second}.")
-        out += [f"- Records skipped: {self.ad_skipped} (no usable verdict: {self.ad_skipped - self.ad_shifted}; "
-                f"label didn't match the gate's record: {self.ad_shifted}). They were not judged.", ""]
-
-        hidden = [m for m in self.mistakes if not m.verdict.visible_in_excerpt]
-        if hidden:
-            out += ["## Needs a longer input", "",
-                    "The judge says the 1,000-character excerpt the gate sees does not show the answer "
-                    "for these. They are not learned as examples, and fixing them does not count "
-                    "toward accepting a change.", ""]
-            out += [f'- "{m.record.title}" ({m.record.source})' for m in hidden]
-            out.append("")
-
-        out += ["## Proposed ad changes", ""]
-        out += (self.example_lines + self.rule_lines) or ["None."]
-        out.append("")
-
-        if self.seed_dir:
-            if self.ads_status == "applied":
-                outcome = "Saved with the rest of the ads change."
-            else:
-                outcome = f"Not saved: the ads change was {self.ads_status}."
-            out += ["## Seed", "", f"From {self.seed_dir}. {outcome}", ""]
-            out += (self.seed_lines or ["- The seed held nothing usable."]) + [""]
-
-        out += ["## Dedup cases", ""]
-        out += self.dedup_lines or ["None."]
-        out += [f"- Cases skipped: {self.dedup_skipped} (malformed: a bad kind, too few or unknown ids, "
-                "or bad groups).", ""]
-
-        out += ["## Gate results", ""]
-        out += self._gate_lines("Ads", self.ad_gate, self.ads_status)
-        if self.ad_gate is not None and self.sample_line:
-            out.append(self.sample_line)
-        if self.ad_gate is not None and self.live_untuned:
-            out.append("The live model was not built by the tuner (no snapshot exists yet). The candidate "
-                       "may also differ from it in num_ctx, the example order and the learned-rule markers, "
-                       "so not every fix or break comes from the new examples.")
-        out += self._gate_lines("Dedup", self.dedup_gate, self.dedup_status)
-        out.append("")
-        if self.blocker_lines:
-            out += ["Second opinions on the cases that blocked a gate:", ""] + self.blocker_lines + [""]
-
-        if self.apply_lines:
-            out += ["## Applied", ""] + self.apply_lines + [""]
-
-        out += ["## Usage", "",
-                f"Judge cost: ${self.cost:.2f}, the summed cost_usd of every judge and "
-                f"second-opinion call ({self.second_calls} second-opinion calls).", ""]
-
-        if self.cleanup_lines:
-            out += ["## Clean up", ""] + self.cleanup_lines + [""]
-
-        out += ["## Commands", "",
-                "Rebuild the live ad-detector from base plus learned data:",
-                "", f"    newsradar tune --config {self.config_path} --rebuild", "",
-                f"Undo the latest change applied on {self.date}:",
-                "", f"    newsradar tune --config {self.config_path} --rollback {self.date}", ""]
-        return "\n".join(out)
-
-
 # ---------- the run ----------
 
-class _Tuner:
+class _Tuner(_GateSteps):
     def __init__(self, config: Config, date: str, report: _Report, outcome: TuneOutcome,
                  log: Callable[[str], None] = lambda s: None, seed_dir: Path | None = None):
         self.config = config
@@ -756,211 +488,6 @@ class _Tuner:
         if not new:
             return None
         return _DedupPlan(cases=stored + new, new_count=len(new))
-
-    def _install_candidate(self, plan: _AdPlan) -> None:
-        self.log(f"tune {self.date}: building and installing the candidate model")
-        text = _build_text(self.config, plan.examples, plan.rules)
-        self.candidate_attempted = True
-        _install(self.config, text, self.candidate)
-
-    def _ad_cases(self, records: list[AdRecord], judgement: AdJudgement, mistakes: list[_Mistake],
-                  plan: _AdPlan) -> tuple[list[Case], dict[str, AdRecord], set[str]]:
-        """Gate cases, today's case ids mapped to their records, and the ids of
-        today cases whose label the planning second opinion already disputed.
-
-        Every base, learned and seed example is a case. Of today's records,
-        every mistake, removal, settled case and record behind a new example
-        is a case. Records that passed fill what is left of
-        max_gate_today_cases, picked by _sample_passed."""
-        cases: list[Case] = []
-        for prefix, examples in (("base", load_examples(BASE_EXAMPLES)), ("learned", self.store.ad_examples())):
-            for e in examples:
-                cases.append(Case(id=f"{prefix}:{e['id']}", title=e["title"], text=e["summary"],
-                                  expected=bool(e["is_ad"]), today_mistake=False, countable=True))
-        for e in self.seed_examples:
-            cases.append(Case(id=f"seed:{e['id']}", title=e["title"], text=e["summary"],
-                              expected=bool(e["is_ad"]), today_mistake=False, countable=True))
-        disputed = {m.record.key for m in mistakes if m.second is False}
-        example_keys = set(plan.example_keys.values())
-        by_key = {r.key: r for r in records}
-        today: dict[str, AdRecord] = {}
-        settled: set[str] = set()
-        passed = {v.key for v in judgement.verdicts
-                  if v.correct and v.key not in disputed and v.key not in example_keys
-                  and by_key[v.key].verdict != "ad"}
-        always = len(judgement.verdicts) - len(passed)
-        cap = self.tuning.max_gate_today_cases
-        keep = _sample_passed(sorted(passed), cap - always, self.date)
-        if len(keep) < len(passed):
-            self.rep.sample_line = (
-                f"Ads gate: {len(passed) - len(keep)} of today's {len(passed)} passed records were sampled "
-                f"out (max_gate_today_cases {cap}; the {always} mistakes, removals and records behind new "
-                "examples always count).")
-        for v in judgement.verdicts:
-            if v.key in passed and v.key not in keep:
-                continue
-            record = by_key[v.key]
-            case_id = f"today:{record.key[:8]}"
-            if record.key in disputed:
-                # The two judges disagree, so trust the gate: a candidate that
-                # changes this item's verdict counts as a regression.
-                expected, mistake = record.verdict == "ad", False
-                settled.add(case_id)
-            else:
-                expected, mistake = v.is_ad, not v.correct
-            cases.append(Case(id=case_id, title=record.title, text=record.text_sent,
-                              expected=expected, today_mistake=mistake,
-                              countable=v.visible_in_excerpt if mistake else True, today=True))
-            today[case_id] = record
-        self.rep.case_titles.update({c.id: c.title for c in cases})
-        return cases, today, settled
-
-    def _score_ads(self, cases: list[Case]) -> tuple[list[bool], list[bool]]:
-        """(current_ok, candidate_ok) for the installed live and candidate models."""
-        self.log(f"tune {self.date}: ads gate, {len(cases)} cases")
-        current_ok = [p == c.expected for p, c in zip(predict_ads(self.live, cases), cases, strict=True)]
-        candidate_ok = [p == c.expected for p, c in zip(predict_ads(self.candidate, cases), cases, strict=True)]
-
-        def rerun(i: int) -> tuple[bool, bool]:
-            c = cases[i]
-            return (predict_ads(self.live, [c])[0] == c.expected,
-                    predict_ads(self.candidate, [c])[0] == c.expected)
-
-        return current_ok, stabilize(current_ok, candidate_ok, rerun)
-
-    def _gate_ads(self, records: list[AdRecord], judgement: AdJudgement, mistakes: list[_Mistake],
-                  plan: _AdPlan) -> GateResult:
-        self.rep.live_untuned = not self.store.has_snapshot()
-        self._install_candidate(plan)
-        cases, today, settled = self._ad_cases(records, judgement, mistakes, plan)
-        current_ok, candidate_ok = self._score_ads(cases)
-        result = decide(cases, current_ok, candidate_ok, allow_keep_side_ratio=KEPT_AD_FIX_RATIO)
-        expected = {c.id: c.expected for c in cases}
-
-        def disputes(case_id: str) -> bool | None:
-            is_ad = self._second_ad(today[case_id])
-            return None if is_ad is None else is_ad != expected[case_id]
-
-        # A case whose dispute the planning second opinion already settled gets no
-        # second opinion here, so D1 never drops it. It can still pass on the keep
-        # side under the kept-ad allowance; any other break of it blocks.
-        checks = {cid: disputes for cid in today if cid not in settled}
-        result, gone = self._settle_blockers("Ads", result, cases, current_ok, candidate_ok, checks,
-                                             keep_side_ratio=KEPT_AD_FIX_RATIO)
-        if not gone:
-            return result
-        keys = {today[cid].key for cid in gone}
-        drop = {eid for eid, key in plan.example_keys.items() if key in keys}
-        if not drop or not result.accepted:
-            return result
-
-        # The applied change must be the gated one: rebuild without the disputed
-        # examples and gate once more, with no second opinions this time.
-        plan.examples = [e for e in plan.examples if str(e.get("id")) not in drop]
-        plan.new_examples = [e for e in plan.new_examples if str(e.get("id")) not in drop]
-        self.rep.blocker_lines.append(
-            f"- Ads: dropped the disputed examples {', '.join(sorted(drop))} and gated the change again.")
-        if not plan.new_examples and not plan.rules_changed:
-            self.rep.blocker_lines.append("- Ads: nothing new is left after the drops, so nothing is applied.")
-            return GateResult(False, "nothing new is left after dropping disputed examples",
-                              result.current_errors, result.candidate_errors, [], [])
-        self._install_candidate(plan)
-        remaining = [c for c in cases if c.id not in gone]
-        current_ok, candidate_ok = self._score_ads(remaining)
-        return decide(remaining, current_ok, candidate_ok, allow_keep_side_ratio=KEPT_AD_FIX_RATIO)
-
-    def _settle_blockers(self, name: str, result: GateResult, cases: list[Case], current_ok: list[bool],
-                         candidate_ok: list[bool],
-                         checks: dict[str, Callable[[str], bool | None]],
-                         keep_side_ratio: int | None = None) -> tuple[GateResult, set[str]]:
-        """When a gate rejects and every broken case is in checks, ask a blind
-        second opinion about each. checks maps a case id to a call returning
-        True when the second opinion disputes the case, False when it supports
-        the case's label, and None for a malformed reply. A disputed case is
-        dropped and decide runs again on the rest, reusing the ok lists and
-        keep_side_ratio. Returns (result, disputed ids)."""
-        if result.accepted or not result.broken or not all(b in checks for b in result.broken):
-            return result, set()
-        if len(result.broken) > MAX_BLOCKERS_FOR_SECOND_OPINION:
-            self.rep.blocker_lines.append(
-                f"- {name}: {len(result.broken)} cases broke, more than {MAX_BLOCKERS_FOR_SECOND_OPINION}, "
-                "so the gate rejects without second opinions.")
-            return result, set()
-        self.log(f"tune {self.date}: second opinions on {len(result.broken)} {name.lower()} gate blockers")
-        disputed: set[str] = set()
-        for case_id in result.broken:
-            verdict = checks[case_id](case_id)
-            where = f"- {name}: {case_id} ({self.rep.case_titles.get(case_id, '')})"
-            if verdict is True:
-                disputed.add(case_id)
-                self.rep.blocker_lines.append(f"{where}: disputed, not counted.")
-            elif verdict is None:
-                self.rep.blocker_lines.append(f"{where}: no usable second opinion, so it still blocks.")
-            else:
-                self.rep.blocker_lines.append(f"{where}: the second opinion supports the first judge's label, "
-                                              "so it still blocks.")
-        if not disputed:
-            return result, set()
-        keep = [i for i, c in enumerate(cases) if c.id not in disputed]
-        result = decide([cases[i] for i in keep], [current_ok[i] for i in keep], [candidate_ok[i] for i in keep],
-                        allow_keep_side_ratio=keep_side_ratio)
-        return result, disputed
-
-    def _score_dedup(self, plan: _DedupPlan) -> tuple[list[DedupCase], list[Case], list[bool], list[bool],
-                                                      list[set[int]]]:
-        """Score the current block and the plan's block on every case in the plan.
-        Returns (cases, gate cases, current_ok, candidate_ok, candidate drops)."""
-        cases = [DedupCase(titles=list(c["titles"]), expected_groups=[list(g) for g in c["expected_groups"]],
-                           kind=str(c.get("kind", "")), note=str(c.get("note", ""))) for c in plan.cases]
-        first_new = len(cases) - plan.new_count
-        meta = [Case(id=f"dedup:{i}", title=c.titles[0] if c.titles else "", text="", expected=True,
-                     today_mistake=i >= first_new, countable=True) for i, c in enumerate(cases)]
-        self.rep.case_titles.update({m.id: m.title for m in meta})
-        model = self.config.models.dedup_model
-        current_block = self.store.dedup_examples_block()
-        candidate_block = TuningStore.dedup_block_for(plan.cases)
-
-        def ok(block: str, subset: list[DedupCase]) -> tuple[list[bool], list[set[int]]]:
-            drops = predict_dedup(subset, model, block)
-            return [dedup_case_ok(c, d) for c, d in zip(subset, drops, strict=True)], drops
-
-        current_ok, _ = ok(current_block, cases)
-        candidate_ok, candidate_drops = ok(candidate_block, cases)
-
-        def rerun(i: int) -> tuple[bool, bool]:
-            return ok(current_block, [cases[i]])[0][0], ok(candidate_block, [cases[i]])[0][0]
-
-        return cases, meta, current_ok, stabilize(current_ok, candidate_ok, rerun), candidate_drops
-
-    def _gate_dedup(self, plan: _DedupPlan) -> GateResult:
-        cases, meta, current_ok, candidate_ok, candidate_drops = self._score_dedup(plan)
-        result = decide(meta, current_ok, candidate_ok)
-
-        def disputes(case_id: str) -> bool | None:
-            # Disputed only when the candidate's drops are right under the second
-            # opinion's own groups; any other mismatch leaves the case blocking.
-            i = int(case_id.split(":")[1])
-            groups = self._second_dedup_groups(cases[i])
-            if groups is None:
-                return None
-            theirs = DedupCase(titles=cases[i].titles, expected_groups=groups, kind=cases[i].kind, note="")
-            return dedup_case_ok(theirs, candidate_drops[i])
-
-        checks = {m.id: disputes for m in meta if m.today_mistake}
-        result, gone = self._settle_blockers("Dedup", result, meta, current_ok, candidate_ok, checks)
-        if not gone or not result.accepted:
-            return result
-        # The saved block must be the gated one: drop the disputed cases and gate once more.
-        drop = {int(cid.split(":")[1]) for cid in gone}
-        plan.cases = [c for i, c in enumerate(plan.cases) if i not in drop]
-        plan.new_count -= len(drop)
-        self.rep.blocker_lines.append(f"- Dedup: dropped {len(drop)} disputed cases and gated the change again.")
-        if plan.new_count <= 0:
-            self.rep.blocker_lines.append("- Dedup: nothing new is left after the drops, so nothing is applied.")
-            return GateResult(False, "nothing new is left after dropping disputed cases",
-                              result.current_errors, result.candidate_errors, [], [])
-        _, meta, current_ok, candidate_ok, _ = self._score_dedup(plan)
-        return decide(meta, current_ok, candidate_ok)
 
     def _undo(self, snap: Path, rebuild: bool) -> None:
         """Put the learned files back as the snapshot has them. With rebuild,
