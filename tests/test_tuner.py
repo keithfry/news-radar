@@ -957,18 +957,25 @@ def test_preflight_reads_the_live_modelfile_before_judging(cfg, evidence, fakes,
     assert order[:2] == ["show", "judge"]
 
 
-@pytest.mark.parametrize("outcome", ["exit", "empty", "missing"])
-def test_installed_modelfile_failure_raises_snapshot_error(monkeypatch, outcome):
+@pytest.mark.parametrize("outcome,message", [
+    ("exit", "exited 1: model not found"), ("empty", "printed nothing"), ("missing", "failed: ollama gone"),
+])
+def test_installed_modelfile_failure_raises_snapshot_error(monkeypatch, outcome, message):
+    ran = []
+
     def fake_run(cmd, **kw):
+        ran.append(cmd[0])
         if outcome == "missing":
-            raise FileNotFoundError("ollama")
+            raise FileNotFoundError("ollama gone")
         if outcome == "exit":
             raise subprocess.CalledProcessError(1, cmd, "", "model not found")
         return subprocess.CompletedProcess(cmd, 0, "  \n", "")
 
+    monkeypatch.setattr(models, "ollama_bin", lambda: "/fake/ollama")
     monkeypatch.setattr(models.subprocess, "run", fake_run)
-    with pytest.raises(tuner.SnapshotError):
+    with pytest.raises(tuner.SnapshotError, match=message):
         tuner.installed_modelfile(LIVE)
+    assert ran == ["/fake/ollama"]  # the branch under test ran, not a lookup failure
 
 
 def test_undo_with_rebuild_reinstalls_the_stored_live_text(cfg, fakes):
