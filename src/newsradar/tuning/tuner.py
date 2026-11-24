@@ -346,7 +346,8 @@ class _Report:
 
         out += ["## Dedup cases", ""]
         out += self.dedup_lines or ["None."]
-        out += [f"- Cases skipped: {self.dedup_skipped} (the judge used an unknown or repeated id).", ""]
+        out += [f"- Cases skipped: {self.dedup_skipped} (malformed: a bad kind, too few or unknown ids, "
+                "or bad groups).", ""]
 
         out += ["## Gate results", ""]
         out += self._gate_lines("Ads", self.ad_gate, self.ads_status)

@@ -369,11 +369,32 @@ def test_case_titles_come_from_the_batch_verbatim(fake_claude):
     assert cases[0].titles == [titles[1], titles[0]]
 
 
-@pytest.mark.parametrize("groups", [[[0, 3]], [[0]], [[-1, 0]], [[0, 1], [1, 2]]])
-def test_judge_dedup_bad_groups_raise(fake_claude, groups):
-    fake_claude.reply = case_reply({"kind": "missed_duplicate", "ids": [0, 1, 3],
-                                    "expected_groups": groups, "note": ""})
-    with pytest.raises(JudgeError, match="d1"):
+GOOD_CASE = {"kind": "wrong_merge", "ids": [2, 3], "expected_groups": [], "note": "good"}
+
+
+@pytest.mark.parametrize("bad", [
+    {"kind": "missed_duplicate", "ids": [0, 1, 3], "expected_groups": [[0, 3]], "note": ""},  # out of range
+    {"kind": "missed_duplicate", "ids": [0, 1, 3], "expected_groups": [[0]], "note": ""},  # one member
+    {"kind": "missed_duplicate", "ids": [0, 1, 3], "expected_groups": [[-1, 0]], "note": ""},
+    {"kind": "missed_duplicate", "ids": [0, 1, 3], "expected_groups": [[0, 1], [1, 2]], "note": ""},  # repeated
+    {"kind": "missed_duplicate", "ids": [0, 1], "expected_groups": "0,1", "note": ""},  # not a list
+    {"kind": "wrong_merge", "ids": [2], "expected_groups": [], "note": ""},  # fewer than 2 ids
+    {"kind": "wrong_merge", "ids": "2,3", "expected_groups": [], "note": ""},
+    {"kind": "merge", "ids": [2, 3], "expected_groups": [], "note": ""},  # bad kind
+    {"ids": [2, 3], "expected_groups": [], "note": ""},
+    {"kind": "missed_duplicate", "ids": [0, 2], "expected_groups": [], "note": ""},  # no group
+    "not a case",
+], ids=["out-of-range", "one-member", "negative", "repeated", "groups-not-list", "one-id", "ids-not-list",
+        "bad-kind", "no-kind", "missed-no-group", "not-dict"])
+def test_malformed_case_is_skipped_and_counted_and_the_rest_kept(fake_claude, bad):
+    fake_claude.reply = case_reply(bad, GOOD_CASE)
+    cases, _, skipped = judge_dedup([drec(TITLES, [3])], TUNING)
+    assert [c.note for c in cases] == ["good"] and skipped == 1
+
+
+def test_reply_without_a_cases_list_raises(fake_claude):
+    fake_claude.reply = lambda p: {"cases": "none"}
+    with pytest.raises(JudgeError, match="no cases list"):
         judge_dedup([drec(TITLES, [])], TUNING)
 
 
@@ -384,19 +405,6 @@ def test_case_with_unknown_id_is_skipped_and_counted(fake_claude, ids):
         {"kind": "wrong_merge", "ids": [2, 3], "expected_groups": [], "note": "good"})
     cases, _, skipped = judge_dedup([drec(TITLES, [3])], TUNING)
     assert [c.note for c in cases] == ["good"] and skipped == 1
-
-
-def test_case_needs_two_ids(fake_claude):
-    fake_claude.reply = case_reply({"kind": "wrong_merge", "ids": [2], "expected_groups": [], "note": ""})
-    with pytest.raises(JudgeError):
-        judge_dedup([drec(TITLES, [2])], TUNING)
-
-
-def test_missed_duplicate_needs_a_group(fake_claude):
-    fake_claude.reply = case_reply({"kind": "missed_duplicate", "ids": [0, 2],
-                                    "expected_groups": [], "note": ""})
-    with pytest.raises(JudgeError):
-        judge_dedup([drec(TITLES, [])], TUNING)
 
 
 def test_wrong_merge_with_no_groups_is_valid(fake_claude):

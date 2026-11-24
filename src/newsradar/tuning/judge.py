@@ -3,7 +3,8 @@
 The judge returns data only. Every reply is checked against the batch it
 answers. A failed call or a broken reply raises JudgeError, so the tuner
 applies nothing from a run it can't trust. A record the judge skipped or
-named with a wrong id is left unjudged and counted. JudgeError carries the
+named with a wrong id is left unjudged and counted, and so is a malformed
+dedup case. JudgeError carries the
 cost of every call made before the failure.
 """
 
@@ -348,24 +349,30 @@ def _dedup_payload(record: DedupRecord) -> list[dict]:
 
 
 def _parse_case(raw, batch_titles: list[str], what: str) -> DedupCase | None:
-    """Build a case from batch ids. Returns None when an id is unknown or repeated."""
+    """Build a case from batch ids. Returns None for any malformed case: not an
+    object, a bad kind, fewer than 2 ids, an unknown or repeated id, bad
+    groups, or a missed_duplicate with no group. The caller skips and counts it."""
     if not isinstance(raw, dict) or raw.get("kind") not in CASE_KINDS:
-        raise JudgeError(f"{what}: bad case {raw!r}")
+        return None
     ids = raw.get("ids")
     if not isinstance(ids, list) or len(ids) < 2:
-        raise JudgeError(f"{what}: a case needs at least 2 ids")
+        return None
     if (len(set(map(repr, ids))) != len(ids)
             or not all(type(i) is int and 0 <= i < len(batch_titles) for i in ids)):
         return None
-    groups = _check_groups(raw.get("expected_groups"), len(ids), what)
+    try:
+        groups = _check_groups(raw.get("expected_groups"), len(ids), what)
+    except JudgeError:
+        return None
     if raw["kind"] == "missed_duplicate" and not groups:
-        raise JudgeError(f"{what}: a missed_duplicate case needs a duplicate group")
+        return None
     return DedupCase(titles=[batch_titles[i] for i in ids], expected_groups=groups, kind=raw["kind"],
                      note=str(raw.get("note") or ""))
 
 
 def judge_dedup(records: list[DedupRecord], tuning: TuningConfig) -> tuple[list[DedupCase], float, int]:
-    """Returns (cases, cost_usd, skipped): skipped counts cases dropped for an unknown or repeated id."""
+    """Returns (cases, cost_usd, skipped): skipped counts malformed cases, which
+    are dropped one by one. Only a reply with no cases list raises."""
     cases: list[DedupCase] = []
     skipped = 0
     with _metered() as meter:
