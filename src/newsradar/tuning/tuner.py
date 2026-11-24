@@ -73,15 +73,23 @@ BASE_EXAMPLES = DEFAULT_DATA_PATH
 _FORBIDDEN = ('"""', LEARNED_RULES_START.strip(), LEARNED_RULES_END.strip(), TRAINING_SECTION_START.strip())
 
 # A rule that tells the gate to output is_ad: true makes it remove more, whatever leaning it claims.
-_SAYS_AD = re.compile(r"is_ad[\"']?\s*[:=]\s*true", re.IGNORECASE)
+_SAYS_AD = re.compile(r"is_ad[\"'`]?\s*[:=]\s*true", re.IGNORECASE)
+
+# Second opinions on gate blockers are asked only when this many cases or fewer broke.
+MAX_BLOCKERS_FOR_SECOND_OPINION = 2
 
 
 class SeedError(RuntimeError):
     """The --include-seed folder is missing or holds files the tuner can't read."""
 
 
+class SnapshotError(RuntimeError):
+    """`ollama show --modelfile` failed, so the live model can't be snapshotted."""
+
+
 # A failure of any of these means the run can't trust its results and applies nothing.
-_RUN_ERRORS = (JudgeError, ClaudeCallError, GateError, SeedError, subprocess.CalledProcessError, OSError)
+_RUN_ERRORS = (JudgeError, ClaudeCallError, GateError, SeedError, SnapshotError,
+               subprocess.CalledProcessError, OSError)
 
 
 @dataclass
@@ -97,7 +105,28 @@ def live_model_name(config: Config) -> str:
 
 
 def candidate_model_name(config: Config) -> str:
-    return f"{live_model_name(config)}-candidate"
+    """`<live>-candidate`, with any `:tag` on the live name dropped first."""
+    name = live_model_name(config)
+    base, sep, tag = name.rpartition(":")
+    if sep and "/" not in tag:
+        name = base
+    return f"{name}-candidate"
+
+
+def installed_modelfile(name: str) -> str:
+    """The Modelfile of the installed model, from `ollama show --modelfile`.
+    Raises SnapshotError when the call fails or prints nothing."""
+    try:
+        proc = subprocess.run(["ollama", "show", "--modelfile", name], capture_output=True, text=True,
+                              check=True, timeout=120)
+    except subprocess.CalledProcessError as exc:
+        raise SnapshotError(f"ollama show --modelfile {name} exited {exc.returncode}: "
+                            f"{(exc.stderr or '').strip()[:300]}") from exc
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise SnapshotError(f"ollama show --modelfile {name} failed: {exc}") from exc
+    if not proc.stdout.strip():
+        raise SnapshotError(f"ollama show --modelfile {name} printed nothing")
+    return proc.stdout
 
 
 def remove_ollama_model(name: str) -> None:
@@ -142,14 +171,22 @@ def rebuild_live_model(config: Config, model_name: str | None = None) -> str:
     return text
 
 
-def rollback(config: Config, date: str) -> None:
-    """Restore the latest snapshot taken on date and rebuild the live model from it."""
+def rollback(config: Config, date: str) -> bool:
+    """Restore the parts the latest snapshot on date applied. When that run
+    changed the ads, reinstall the live model from the Modelfile the snapshot
+    took from the model that was live then. Returns True when it reinstalled."""
     store = TuningStore(config.tuning.data_dir)
     snap = store.latest_snapshot(date)
     if snap is None:
         raise FileNotFoundError(f"no snapshot for {date} in {store.root / 'snapshots'}")
-    text = store.restore(snap)
+    parts = store.snapshot_parts(snap)
+    text = store.restore(snap, parts)
+    if "ads" not in parts:
+        return False
+    if text is None:
+        raise FileNotFoundError(f"snapshot {snap} changed the ads but holds no Modelfile")
     _install(config, text, live_model_name(config))
+    return True
 
 
 def _text(exc: BaseException) -> str:
@@ -267,6 +304,7 @@ class _Report:
     seed_dir: Path | None = None
     seed_lines: list[str] = field(default_factory=list)
     ads_status: str = "no change proposed"
+    live_untuned: bool = False  # no snapshot yet, so the live model wasn't built by the tuner
     undo_status: str = ""
     dedup_status: str = "no change proposed"
 
@@ -351,6 +389,10 @@ class _Report:
 
         out += ["## Gate results", ""]
         out += self._gate_lines("Ads", self.ad_gate, self.ads_status)
+        if self.ad_gate is not None and self.live_untuned:
+            out.append("The live model was not built by the tuner (no snapshot exists yet). The candidate "
+                       "may also differ from it in num_ctx, the example order and the learned-rule markers, "
+                       "so not every fix or break comes from the new examples.")
         out += self._gate_lines("Dedup", self.dedup_gate, self.dedup_status)
         out.append("")
         if self.blocker_lines:
@@ -636,7 +678,8 @@ class _Tuner:
         for case in cases:
             note = f" {case.note.strip().rstrip('.')}." if case.note.strip() else ""
             where = f"- {case.kind}: {case.titles}, expected groups {case.expected_groups}.{note}"
-            if case.kind == "missed_duplicate":
+            # A case with expected groups teaches a merge, which removes more.
+            if case.kind == "missed_duplicate" or case.expected_groups:
                 agreed = self._second_dedup(case)
                 if agreed is not True:
                     why = "disagreed" if agreed is False else "gave no usable reply"
@@ -710,6 +753,7 @@ class _Tuner:
 
     def _gate_ads(self, records: list[AdRecord], judgement: AdJudgement, mistakes: list[_Mistake],
                   plan: _AdPlan) -> GateResult:
+        self.rep.live_untuned = not self.store.has_snapshot()
         self._install_candidate(plan)
         cases, today, settled = self._ad_cases(records, judgement, mistakes)
         current_ok, candidate_ok = self._score_ads(cases)
@@ -755,6 +799,11 @@ class _Tuner:
         dropped and decide runs again on the rest, reusing the ok lists.
         Returns (result, disputed ids)."""
         if result.accepted or not result.broken or not all(b in checks for b in result.broken):
+            return result, set()
+        if len(result.broken) > MAX_BLOCKERS_FOR_SECOND_OPINION:
+            self.rep.blocker_lines.append(
+                f"- {name}: {len(result.broken)} cases broke, more than {MAX_BLOCKERS_FOR_SECOND_OPINION}, "
+                "so the gate rejects without second opinions.")
             return result, set()
         self.log(f"tune {self.date}: second opinions on {len(result.broken)} {name.lower()} gate blockers")
         disputed: set[str] = set()
@@ -832,11 +881,12 @@ class _Tuner:
         return decide(meta, current_ok, candidate_ok)
 
     def _undo(self, snap: Path, rebuild: bool) -> None:
-        """Put the learned files (and, with rebuild, the live model) back as the snapshot has them."""
+        """Put the learned files back as the snapshot has them. With rebuild,
+        also reinstall the live model from the Modelfile the snapshot took."""
         lines = self.rep.apply_lines
         rollback_cmd = f"newsradar tune --config {self.config.config_path} --rollback {self.date}"
         try:
-            self.store.restore(snap)
+            text = self.store.restore(snap)
         except Exception as exc:
             self.rep.undo_status = "restoring the snapshot failed too"
             lines.append(f"- Restoring the learned files from {snap} failed: {type(exc).__name__}: "
@@ -847,8 +897,10 @@ class _Tuner:
         if not rebuild:
             return
         try:
-            _install(self.config, (snap / "Modelfile").read_text(encoding="utf-8"), self.live)
-            lines.append(f"- Rebuilt {self.live} from the snapshot.")
+            if text is None:
+                raise FileNotFoundError(f"{snap} holds no Modelfile")
+            _install(self.config, text, self.live)
+            lines.append(f"- Reinstalled {self.live} from the Modelfile the snapshot took of the live model.")
         except Exception as exc:
             lines.append(f"- Rebuilding {self.live} from the snapshot also failed: "
                          f"{type(exc).__name__}: {_text(exc)}. The learned files are restored, "
@@ -858,10 +910,15 @@ class _Tuner:
         if not ad_plan and not dedup_plan:
             return
         # One snapshot covers both parts, so --rollback DATE undoes the whole run.
-        current_text = _build_text(self.config, self.store.ad_examples(), self.store.ad_rules())
-        snap = self.store.snapshot(self.date, current_text)
+        # It keeps the Modelfile of the model actually live now, read back from
+        # Ollama, so a rollback reinstalls that model and not a rebuild.
+        parts = [name for name, plan in (("ads", ad_plan), ("dedup", dedup_plan)) if plan]
+        live_text = installed_modelfile(self.live) if ad_plan else None
+        snap = self.store.snapshot(self.date, live_text, parts)
         lines = self.rep.apply_lines
-        lines.append(f"- Snapshot of the learned files and built Modelfile: {snap}")
+        what = "the learned files and the live Modelfile" if ad_plan else "the learned files"
+        lines.append(f"- Snapshot of {what}: {snap}")
+        live_changed = False
         try:
             if ad_plan:
                 self.store.save_ad_examples(ad_plan.examples)
@@ -872,10 +929,15 @@ class _Tuner:
                 lines.append(f"- Saved {dedup_plan.new_count} new dedup cases.")
             if ad_plan:
                 rebuild_live_model(self.config)
+                live_changed = True
                 lines.append(f"- Rebuilt {self.live} from base plus learned data.")
         except Exception as exc:
             lines.append(f"- Applying failed: {type(exc).__name__}: {_text(exc)}.")
-            self._undo(snap, rebuild=ad_plan is not None)
+            # A failed `ollama create` leaves the old model in place, so only a
+            # model this run did replace needs reinstalling.
+            if ad_plan and not live_changed:
+                lines.append(f"- {self.live} was not replaced, so it is still the model from before this run.")
+            self._undo(snap, rebuild=live_changed)
             undone = self.rep.undo_status
             if ad_plan:
                 self.rep.ads_status = f"accepted, but applying failed and {undone}"

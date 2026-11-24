@@ -672,10 +672,14 @@ def _run_tune_command(args: argparse.Namespace, parser: argparse.ArgumentParser)
         return
     if args.rollback:
         try:
-            tuner.rollback(config, args.rollback)
+            reinstalled = tuner.rollback(config, args.rollback)
         except FileNotFoundError as e:
             parser.exit(1, f"{e}\n")
-        print(f"Restored the {args.rollback} snapshot and rebuilt {tuner.live_model_name(config)}")
+        if reinstalled:
+            print(f"Restored the {args.rollback} snapshot and reinstalled {tuner.live_model_name(config)}")
+        else:
+            print(f"Restored the {args.rollback} snapshot; it changed dedup only, "
+                  f"so {tuner.live_model_name(config)} is unchanged")
         return
     if not config.tuning.enabled:
         print("Tuning is off ([tuning] enabled = false); nothing to do.")

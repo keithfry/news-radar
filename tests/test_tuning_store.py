@@ -25,6 +25,23 @@ def test_store_round_trip_snapshot_and_restore(tmp_path):
     assert [e["title"] for e in s.ad_examples()] == ["a"] and s.ad_rules() == "r1"
 
 
+def test_snapshot_records_parts_and_restore_touches_only_those(tmp_path):
+    s = TuningStore(tmp_path)
+    s.save_ad_rules("r1"); s.save_dedup_cases([{"titles": ["a", "b"], "expected_groups": []}])
+    snap = s.snapshot("2026-11-23", None, ["dedup"])
+    assert s.snapshot_parts(snap) == ["dedup"] and not (snap / "Modelfile").exists()
+    s.save_ad_rules("r2"); s.save_dedup_cases([])
+    assert s.restore(snap) is None
+    assert s.ad_rules() == "r2" and [c["titles"] for c in s.dedup_cases()] == [["a", "b"]]
+
+
+def test_snapshot_without_parts_file_counts_as_both(tmp_path):
+    s = TuningStore(tmp_path)
+    snap = s.root / "snapshots" / "2026-11-23"
+    snap.mkdir(parents=True)
+    assert s.snapshot_parts(snap) == ["ads", "dedup"] and s.has_snapshot()
+
+
 def test_missing_files_read_empty(tmp_path):
     s = TuningStore(tmp_path / "nope")
     assert s.ad_examples() == [] and s.ad_rules() == "" and s.dedup_cases() == []

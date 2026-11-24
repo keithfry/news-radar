@@ -13,6 +13,8 @@ from urllib.parse import urlparse
 
 DEDUP_CASES_IN_PROMPT = 12
 _MODELFILE_NAME = "Modelfile"
+_PARTS_NAME = "applied.json"
+SNAPSHOT_PARTS = ("ads", "dedup")
 _DEDUP_HEADING = "LEARNED EXAMPLES (past mistakes to avoid):"
 AD_EXAMPLES_FILE = "learned_ad_examples.json"
 AD_RULES_FILE = "learned_ad_rules.txt"
@@ -124,8 +126,10 @@ class TuningStore:
         day = _date.fromisoformat(date)
         return [(n, d) for (d_day, n), d in self._snapshots() if d_day == day]
 
-    def snapshot(self, date: str, built_modelfile: str) -> Path:
-        """Copy the learned files and built Modelfile into a new snapshot folder.
+    def snapshot(self, date: str, live_modelfile: str | None,
+                 parts: list[str] | tuple[str, ...] = SNAPSHOT_PARTS) -> Path:
+        """Copy the learned files into a new snapshot folder, with the live
+        Modelfile when given and the parts ("ads", "dedup") the run applies.
         A later snapshot on the same day gets a suffix above every existing one."""
         same_day = self._snapshots_on(date)
         n = max(n for n, _ in same_day) + 1 if same_day else 1
@@ -134,18 +138,37 @@ class TuningStore:
         for src in self._learned_files():
             if src.exists():
                 shutil.copy2(src, path / src.name)
-        (path / _MODELFILE_NAME).write_text(built_modelfile, encoding="utf-8")
+        if live_modelfile is not None:
+            (path / _MODELFILE_NAME).write_text(live_modelfile, encoding="utf-8")
+        (path / _PARTS_NAME).write_text(json.dumps({"parts": list(parts)}) + "\n", encoding="utf-8")
         return path
 
-    def restore(self, snapshot_dir: Path) -> str:
+    def snapshot_parts(self, snapshot_dir: Path) -> list[str]:
+        """The parts a snapshot's run applied. A snapshot with no record of
+        them counts as both."""
+        path = Path(snapshot_dir) / _PARTS_NAME
+        if not path.exists():
+            return list(SNAPSHOT_PARTS)
+        return [p for p in json.loads(path.read_text(encoding="utf-8"))["parts"] if p in SNAPSHOT_PARTS]
+
+    def restore(self, snapshot_dir: Path, parts: list[str] | None = None) -> str | None:
+        """Put back the learned files of the snapshot's parts (or of parts when
+        given) and return the snapshot's Modelfile text, or None if it has none."""
         snapshot_dir = Path(snapshot_dir)
-        for dest in self._learned_files():
+        wanted = self.snapshot_parts(snapshot_dir) if parts is None else parts
+        files = ([self._ad_examples, self._ad_rules] if "ads" in wanted else []) + (
+            [self._dedup_cases] if "dedup" in wanted else [])
+        for dest in files:
             saved = snapshot_dir / dest.name
             if saved.exists():
                 self._write(dest, saved.read_text(encoding="utf-8"))
             elif dest.exists():
                 dest.unlink()
-        return (snapshot_dir / _MODELFILE_NAME).read_text(encoding="utf-8")
+        modelfile = snapshot_dir / _MODELFILE_NAME
+        return modelfile.read_text(encoding="utf-8") if modelfile.exists() else None
+
+    def has_snapshot(self) -> bool:
+        return bool(self._snapshots())
 
     def latest_snapshot(self, date: str) -> Path | None:
         """The snapshot on date with the highest suffix, gaps allowed."""

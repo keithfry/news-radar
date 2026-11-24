@@ -98,6 +98,9 @@ class Fakes:
         self.fail_install_of: str | None = None
         self.fail_install_times: int | None = None  # None fails every time
         self.removed: list[str] = []
+        self.live_text = 'FROM /blobs/live-weights\nSYSTEM """the live model before this run"""\n'
+        self.show_error = False
+        self.shown: list[str] = []
 
     # scenario helpers
     def candidate_fixes_today_mistake(self):
@@ -191,6 +194,13 @@ class Fakes:
     def remove(self, model_name):
         self.removed.append(model_name)
 
+    def show(self, model_name):
+        """`ollama show --modelfile`: what the fake last installed under that name."""
+        self.shown.append(model_name)
+        if self.show_error:
+            raise tuner.SnapshotError("ollama show failed")
+        return self.modelfiles.get(model_name, self.live_text)
+
 
 @pytest.fixture
 def fakes(monkeypatch):
@@ -210,6 +220,7 @@ def fakes(monkeypatch):
     monkeypatch.setattr(tuner, "predict_dedup", f.predict_dedup)
     monkeypatch.setattr(tuner, "install_ad_detector_model", f.install)
     monkeypatch.setattr(tuner, "remove_ollama_model", f.remove)
+    monkeypatch.setattr(tuner, "installed_modelfile", f.show)
     return f
 
 
@@ -291,17 +302,15 @@ def test_rebuild_failure_restores_previous_learned_data(cfg, evidence, fakes):
     assert store(cfg).ad_examples() == []
 
 
-def test_first_live_rebuild_fails_and_snapshot_rebuild_succeeds(cfg, evidence, fakes):
+def test_failed_live_create_keeps_the_old_model_and_restores_files_only(cfg, evidence, fakes):
     fakes.candidate_fixes_today_mistake()
     fakes.fail_install_of = LIVE
-    fakes.fail_install_times = 1
     out = run_tune(cfg, DATE, log=lambda s: None)
     s = store(cfg)
     snap = s.latest_snapshot(DATE)
     text = out.report_path.read_text()
-    assert not out.ads_applied and f"Rebuilt {LIVE} from the snapshot" in text
-    assert fakes.installed[-2:] == [LIVE, LIVE]
-    assert fakes.modelfiles[LIVE] == (snap / "Modelfile").read_text()
+    assert not out.ads_applied and fakes.installed.count(LIVE) == 1  # no rebuild from the snapshot
+    assert f"{LIVE} was not replaced" in text and "Rebuilt" not in text
     assert s.ad_examples() == [] and not (snap / "learned_ad_examples.json").exists()
 
 
@@ -471,13 +480,13 @@ def test_rebuild_live_model_uses_base_plus_learned(cfg, fakes):
     assert fakes.modelfiles[LIVE] == text
 
 
-def test_rollback_restores_snapshot_and_rebuilds(cfg, evidence, fakes):
+def test_rollback_restores_snapshot_and_reinstalls_the_model_that_was_live(cfg, evidence, fakes):
     fakes.candidate_fixes_today_mistake()
     run_tune(cfg, DATE, log=lambda s: None)
     assert store(cfg).ad_examples()
-    rollback(cfg, DATE)
+    assert rollback(cfg, DATE) is True
     assert store(cfg).ad_examples() == [] and fakes.installed[-1] == LIVE
-    assert "AI Report issue 42" not in fakes.modelfiles[LIVE]
+    assert fakes.modelfiles[LIVE] == fakes.live_text
 
 
 def test_rollback_without_snapshot_raises(cfg, fakes):
@@ -781,3 +790,153 @@ def test_every_seed_rule_gets_the_rule_second_opinion(cfg, evidence, fakes, tmp_
     seed = write_seed(tmp_path, rules="Judge the whole item.\nKeep newsletter issues.\n")
     run_tune(cfg, DATE, log=lambda s: None, seed_dir=seed)
     assert [r for r, _ in fakes.rule_checks] == ["Judge the whole item.", "Keep newsletter issues."]
+
+
+# ---------- final review fixes ----------
+
+def test_snapshot_stores_the_live_modelfile_from_ollama_show(cfg, evidence, fakes):
+    fakes.candidate_fixes_today_mistake()
+    run_tune(cfg, DATE, log=lambda s: None)
+    snap = store(cfg).latest_snapshot(DATE)
+    assert fakes.shown == [LIVE] and (snap / "Modelfile").read_text() == fakes.live_text
+    assert json.loads((snap / "applied.json").read_text()) == {"parts": ["ads"]}
+
+
+def test_failed_ollama_show_applies_nothing(cfg, evidence, fakes):
+    fakes.candidate_fixes_today_mistake()
+    fakes.dedup_cases = [WRONG_MERGE]
+    fakes.show_error = True
+    out = run_tune(cfg, DATE, log=lambda s: None)
+    s = store(cfg)
+    assert not out.ads_applied and not out.dedup_applied
+    assert s.ad_examples() == [] and s.dedup_cases() == [] and s.latest_snapshot(DATE) is None
+    assert LIVE not in fakes.installed
+    assert "applied nothing" in out.report_path.read_text() and "ollama show failed" in out.report_path.read_text()
+
+
+def test_installed_modelfile_runs_ollama_show(monkeypatch):
+    calls = []
+
+    def fake_run(cmd, **kw):
+        calls.append(cmd)
+        return subprocess.CompletedProcess(cmd, 0, "FROM /blobs/x\nSYSTEM hi\n", "")
+
+    monkeypatch.setattr(tuner.subprocess, "run", fake_run)
+    assert tuner.installed_modelfile(LIVE) == "FROM /blobs/x\nSYSTEM hi\n"
+    assert calls == [["ollama", "show", "--modelfile", LIVE]]
+
+
+@pytest.mark.parametrize("outcome", ["exit", "empty", "missing"])
+def test_installed_modelfile_failure_raises_snapshot_error(monkeypatch, outcome):
+    def fake_run(cmd, **kw):
+        if outcome == "missing":
+            raise FileNotFoundError("ollama")
+        if outcome == "exit":
+            raise subprocess.CalledProcessError(1, cmd, "", "model not found")
+        return subprocess.CompletedProcess(cmd, 0, "  \n", "")
+
+    monkeypatch.setattr(tuner.subprocess, "run", fake_run)
+    with pytest.raises(tuner.SnapshotError):
+        tuner.installed_modelfile(LIVE)
+
+
+def test_undo_with_rebuild_reinstalls_the_stored_live_text(cfg, fakes):
+    s = store(cfg)
+    snap = s.snapshot(DATE, "FROM /blobs/old\n", ["ads"])
+    s.save_ad_examples([{"id": "x"}])
+    rep = tuner._Report(date=DATE, config_path=cfg.config_path)
+    t = tuner._Tuner(cfg, DATE, rep, tuner.TuneOutcome(False, False, "", s.report_path(DATE)))
+    t._undo(snap, rebuild=True)
+    assert s.ad_examples() == [] and fakes.installed == [LIVE] and fakes.modelfiles[LIVE] == "FROM /blobs/old\n"
+
+
+def test_dedup_only_day_snapshots_without_ollama_and_rollback_leaves_the_ad_model(cfg, evidence, fakes):
+    fakes.dedup_cases = [WRONG_MERGE]
+    out = run_tune(cfg, DATE, log=lambda s: None)
+    s = store(cfg)
+    snap = s.latest_snapshot(DATE)
+    assert out.dedup_applied and fakes.shown == [] and not (snap / "Modelfile").exists()
+    assert json.loads((snap / "applied.json").read_text()) == {"parts": ["dedup"]}
+    later = [{"id": "later", "title": "t", "summary": "s", "is_ad": False, "ad_type": "not_ad"}]
+    s.save_ad_examples(later)  # an ads change made after that day
+    assert rollback(cfg, DATE) is False
+    assert s.dedup_cases() == [] and s.ad_examples() == later and LIVE not in fakes.installed
+
+
+def test_ads_and_dedup_day_rollback_restores_both_and_reinstalls(cfg, evidence, fakes):
+    fakes.candidate_fixes_today_mistake()
+    fakes.dedup_cases = [WRONG_MERGE]
+    out = run_tune(cfg, DATE, log=lambda s: None)
+    snap = store(cfg).latest_snapshot(DATE)
+    assert out.ads_applied and out.dedup_applied
+    assert json.loads((snap / "applied.json").read_text()) == {"parts": ["ads", "dedup"]}
+    assert rollback(cfg, DATE) is True
+    assert store(cfg).ad_examples() == [] and store(cfg).dedup_cases() == []
+    assert fakes.modelfiles[LIVE] == fakes.live_text
+
+
+def test_rollback_of_a_snapshot_without_applied_file_restores_all_and_reinstalls(cfg, fakes):
+    s = store(cfg)
+    s.save_dedup_cases([{"titles": ["a", "b"], "expected_groups": []}])
+    snap = s.root / "snapshots" / DATE
+    snap.mkdir(parents=True)
+    (snap / "Modelfile").write_text("FROM /blobs/legacy\n")
+    assert rollback(cfg, DATE) is True
+    assert s.dedup_cases() == [] and fakes.modelfiles[LIVE] == "FROM /blobs/legacy\n"
+
+
+def test_rule_with_backticked_is_ad_true_is_remove_leaning(cfg, evidence, fakes):
+    fakes.candidate_fixes_today_mistake()
+    fakes.second_opinion_rule = False
+    text = "Output `is_ad`: true when the whole item is a pitch."
+    fakes.rules = [ProposedRule(text, "keep")]
+    run_tune(cfg, DATE, log=lambda s: None)
+    assert [r for r, _ in fakes.rule_checks] == [text] and store(cfg).ad_rules() == ""
+
+
+def test_wrong_merge_that_teaches_a_merge_needs_second_opinion(cfg, evidence, fakes):
+    case = DedupCase(titles=["A launches X", "A ships X", "B raises money"], expected_groups=[[0, 1]],
+                     kind="wrong_merge", note="merged the wrong pair")
+    fakes.dedup_cases = [case]
+    fakes.second_opinion_dedup = False
+    out = run_tune(cfg, DATE, log=lambda s: None)
+    assert not out.dedup_applied and store(cfg).dedup_cases() == []
+    assert "Second opinion: disagreed" in out.report_path.read_text()
+
+
+def _missed(n):
+    return [DedupCase(titles=[f"Q{i} one", f"Q{i} two"], expected_groups=[[0, 1]], kind="missed_duplicate",
+                      note="") for i in range(n)]
+
+
+def test_more_than_two_blockers_reject_without_second_opinions(cfg, evidence, fakes):
+    fakes.dedup_cases = _missed(3)  # the candidate breaks all three
+    out = run_tune(cfg, DATE, log=lambda s: None)
+    assert not out.dedup_applied and fakes.second_dedup_group_calls == 0
+    assert "3 cases broke, more than 2" in out.report_path.read_text()
+
+
+def test_two_blockers_still_get_second_opinions(cfg, evidence, fakes):
+    fakes.dedup_cases = _missed(2)
+    fakes.second_dedup_groups = [[], []]
+    out = run_tune(cfg, DATE, log=lambda s: None)
+    assert fakes.second_dedup_group_calls == 2 and not out.dedup_applied  # nothing new is left
+
+
+def test_report_warns_when_the_live_model_was_not_built_by_the_tuner(cfg, evidence, fakes):
+    fakes.candidate_fixes_today_mistake()
+    first = run_tune(cfg, DATE, log=lambda s: None).report_path.read_text()
+    assert "not built by the tuner" in first and "num_ctx" in first
+    second = run_tune(cfg, DATE, log=lambda s: None).report_path.read_text()
+    assert "not built by the tuner" not in second
+
+
+@pytest.mark.parametrize("configured,live,candidate", [
+    ("ollama/ad-detector", "ad-detector", "ad-detector-candidate"),
+    ("ollama/ad-detector:latest", "ad-detector:latest", "ad-detector-candidate"),
+    ("ad-detector:v2", "ad-detector:v2", "ad-detector-candidate"),
+    ("ollama/me/ad-detector:latest", "me/ad-detector:latest", "me/ad-detector-candidate"),
+])
+def test_candidate_name_drops_the_tag(cfg, configured, live, candidate):
+    cfg.models.ad_detector_model = configured
+    assert tuner.live_model_name(cfg) == live and tuner.candidate_model_name(cfg) == candidate
