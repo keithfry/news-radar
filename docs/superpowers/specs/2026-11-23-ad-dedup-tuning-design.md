@@ -128,8 +128,9 @@ in it is committed or pushed. It holds:
   `tuning/learned_ad_rules.txt`, what the tuner has learned for the ad gate.
 - `tuning/learned_dedup_cases.json`, labeled duplicate test cases, and the
   dedup examples derived from them.
-- `tuning/snapshots/YYYY-MM-DD/`, a copy of the learned files and the built
-  Modelfile before each applied change, for rollback.
+- `tuning/snapshots/YYYY-MM-DD/`, a copy of the learned files before each
+  applied change, the parts it applied, and, when it changes the ads, the
+  live model's Modelfile from `ollama show --modelfile`, for rollback.
 - `tuning/reports/YYYY-MM-DD.md`, the daily report.
 
 The committed `AdDetectorModelfile` and `labeled_examples.json` stay the
@@ -202,9 +203,11 @@ Steps:
    The same three rules apply: no new wrong merge or new miss, at least one
    fix, fewer errors in total.
 8. **Apply.** For each part that passed: snapshot the current learned files
-   and built Modelfile, write the new learned files, and rebuild
-   `ad-detector` from base plus learned data. If the rebuild fails, restore
-   the snapshot and rebuild from it. Nothing is committed to git.
+   and the live Modelfile as `ollama show --modelfile` prints it, write the
+   new learned files, and rebuild `ad-detector` from base plus learned data.
+   If `ollama show` fails, apply nothing. If the rebuild fails, the old model
+   is still installed, so restore only the learned files. Nothing is
+   committed to git.
 9. **Report.** Write the daily report: the mistakes found (title, source,
    what the gate did, what each judge said), what was proposed, the scores
    of both versions, whether each change was applied or rejected and why,
@@ -224,8 +227,9 @@ without code edits or commits.
 `newsradar tune --rebuild` builds `ad-detector` from the committed base
 plus the private learned data. `AD_DETECTION.md` changes to point to this
 command instead of a bare `ollama create`, which would drop the learned
-examples. `newsradar tune --rollback YYYY-MM-DD` restores that day's
-snapshot and rebuilds. The report prints both commands.
+examples. `newsradar tune --rollback YYYY-MM-DD` restores the parts that
+day's snapshot applied and, if it changed the ads, reinstalls the model
+that was live before it. The report prints both commands.
 
 ### 7. Limits
 

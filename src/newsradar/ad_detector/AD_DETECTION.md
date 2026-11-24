@@ -77,7 +77,7 @@ repo. `.gitignore` excludes it, so learned data is never committed.
 | `data/tuning/learned_ad_examples.json` | Learned ad and not-ad examples (a JSON list) |
 | `data/tuning/learned_ad_rules.txt` | Learned rule text added to the system prompt |
 | `data/tuning/learned_dedup_cases.json` | Learned dedup cases |
-| `data/tuning/snapshots/` | A copy of the learned files and built Modelfile from before each applied change |
+| `data/tuning/snapshots/` | A copy of the learned files from before each applied change, the parts it applied (`applied.json`), and, when it changed the ads, the live model's Modelfile from `ollama show --modelfile` |
 | `data/tuning/reports/DATE.md` | The report for that day |
 | `data/tuning/build/` | Scratch space for candidate builds, deleted at the end of each run |
 
@@ -107,8 +107,10 @@ saved; run it again on another day. The pending seed lives in `data/tuning/seed/
 
 - `--rebuild` rebuilds the live `ad-detector` model from `AdDetectorModelfile` plus the
   learned files. Run it after any manual edit to the learned files.
-- `--rollback DATE` restores the latest snapshot taken on DATE (learned files and live
-  model) and rebuilds the live model from it.
+- `--rollback DATE` restores the latest snapshot taken on DATE. It puts back the learned
+  files for the parts that run applied. If that run changed the ads, it also reinstalls
+  the live model from the Modelfile the snapshot read from Ollama, which is the model
+  that was live before the change. A dedup-only day leaves the ad model alone.
 
 The tuner builds a `*-candidate` model to test a change and removes it at the end
 of the run. A bare `ollama create` drops learned data, as the Ongoing Workflow section explains.
@@ -152,10 +154,16 @@ The daily tuner (above) handles most of this. To add examples by hand:
 
 7. **Check real content with a scratch config, never the real one.** A scan with the
    real config writes pages into the site folder that the 08:00 job deploys, even with
-   `--dry-run`. Copy the config, point `[paths] output_root` at a temporary folder, delete
-   the `[publish]` section, and scan with the copy:
+   `--dry-run`, and writes evidence into the real `data/`. Copy the whole `config/`
+   folder, since the config names its topic and feed files by relative path. In the
+   copy's `config.toml`, point `[paths] output_root` at a temporary folder, delete the
+   `[publish]` section, and set `[tuning] enabled = false` (or point `[tuning] data_dir`
+   at a temporary folder) so the scan's evidence stays out of the real `data/`. Then
+   scan with the copy:
    ```bash
-   uv run newsradar --config /tmp/scratch-config.toml --dry-run --no-email --date YYYY-MM-DD
+   cp -R config /tmp/scratch-config
+   # edit /tmp/scratch-config/config.toml as above
+   uv run newsradar --config /tmp/scratch-config/config.toml --dry-run --no-email --date YYYY-MM-DD
    ```
    Then read the scan log for "ad gate" lines.
 
