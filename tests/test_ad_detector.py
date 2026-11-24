@@ -5,8 +5,6 @@ The original `test_ad_detector.py` was a standalone CLI script (argparse +
 recall/F1 tables. This version keeps the same labeled dataset and detectors
 but expresses them as real pytest assertions:
 
-- the heuristic detector (`newsradar.cli._is_advertisement`) is pure Python,
-  no LLM required, and always runs.
 - the LLM-gate detector (`newsradar.llm.classify_ad` with the packaged
   `ad-detector` Ollama model) requires a local Ollama daemon with that model
   installed (`newsradar ad-detector install`); skipped automatically if
@@ -25,7 +23,6 @@ from pathlib import Path
 
 import pytest
 
-from newsradar.cli import _is_advertisement
 from newsradar.llm import classify_ad
 from newsradar.tuning.store import domain_only
 
@@ -73,21 +70,6 @@ def test_labeled_dataset_loads():
     assert len(examples) > 0
     ad_count = sum(1 for e in examples if e["is_ad"])
     assert 0 < ad_count < len(examples), "dataset should contain both ad and non-ad examples"
-
-
-def test_heuristic_detector_has_no_false_positives():
-    """_is_advertisement is a cheap zero-LLM-cost pre-filter — it should never
-    flag a genuinely non-ad labeled example (its whole job is to be a safe,
-    conservative fast-path; the LLM gate catches the subtler cases)."""
-    examples = _load_examples()
-    y_true = [e["is_ad"] for e in examples]
-    y_pred = [_is_advertisement(e["title"]) for e in examples]
-    metrics = _metrics(y_true, y_pred)
-    assert metrics["fp"] == 0, f"heuristic flagged a non-ad example as an ad: fp={metrics['fp']}"
-
-
-def test_heuristic_detector_catches_ad_phrase_in_title():
-    assert _is_advertisement("Shop now: 40% off GPUs with promo code AI40")
 
 
 @pytest.mark.skipif(

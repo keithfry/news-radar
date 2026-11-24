@@ -6,10 +6,17 @@ Both gates run before either part is applied. Any failed judge, second
 opinion, candidate build or gate call means nothing is applied for either
 part. The tuner writes only under `[tuning] data_dir` and to the local Ollama
 models, and never runs git.
+
+When the ads or dedup gate rejects only because it broke cases from today's
+judge, each of those cases gets a blind second opinion. A case the second
+opinion disputes is dropped from the gate and from the saved change, and the
+gate decides again on the rest.
 """
 
 from __future__ import annotations
 
+import json
+import re
 import shutil
 import subprocess
 from dataclasses import dataclass, field
@@ -40,7 +47,9 @@ from newsradar.tuning.gate import (
     stabilize,
 )
 from newsradar.tuning.judge import (
+    AD_TYPES,
     RULE_CHECK_ITEMS,
+    SUMMARY_CHARS,
     AdJudgement,
     AdVerdict,
     DedupCase,
@@ -53,7 +62,7 @@ from newsradar.tuning.judge import (
     second_opinion_dedup,
     second_opinion_rule,
 )
-from newsradar.tuning.store import TuningStore
+from newsradar.tuning.store import AD_EXAMPLES_FILE, AD_RULES_FILE, TuningStore, domain_only
 
 BASE_MODELFILE = DEFAULT_MODELFILE_PATH
 BASE_EXAMPLES = DEFAULT_DATA_PATH
@@ -62,8 +71,16 @@ BASE_EXAMPLES = DEFAULT_DATA_PATH
 # build_live_modelfile, so it must never reach the learned files.
 _FORBIDDEN = ('"""', LEARNED_RULES_START.strip(), LEARNED_RULES_END.strip(), TRAINING_SECTION_START.strip())
 
+# A rule that tells the gate to output is_ad: true makes it remove more, whatever leaning it claims.
+_SAYS_AD = re.compile(r"is_ad\s*:\s*true", re.IGNORECASE)
+
+
+class SeedError(RuntimeError):
+    """The --include-seed folder is missing or holds files the tuner can't read."""
+
+
 # A failure of any of these means the run can't trust its results and applies nothing.
-_RUN_ERRORS = (JudgeError, ClaudeCallError, GateError, subprocess.CalledProcessError, OSError)
+_RUN_ERRORS = (JudgeError, ClaudeCallError, GateError, SeedError, subprocess.CalledProcessError, OSError)
 
 
 @dataclass
@@ -138,6 +155,56 @@ def _text(exc: BaseException) -> str:
     return str(exc).rstrip(".")
 
 
+def load_seed(seed_dir: Path) -> tuple[list, list[str]]:
+    """Read a seed folder in the store's format. Returns (raw examples, rule
+    lines). Raises SeedError when the folder or its files can't be read."""
+    seed_dir = Path(seed_dir)
+    examples_path, rules_path = seed_dir / AD_EXAMPLES_FILE, seed_dir / AD_RULES_FILE
+    if not seed_dir.is_dir():
+        raise SeedError(f"seed folder {seed_dir} does not exist")
+    if not examples_path.exists() and not rules_path.exists():
+        raise SeedError(f"seed folder {seed_dir} holds neither {AD_EXAMPLES_FILE} nor {AD_RULES_FILE}")
+    examples: list = []
+    if examples_path.exists():
+        try:
+            examples = json.loads(examples_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as exc:
+            raise SeedError(f"can't read {examples_path}: {exc}") from exc
+        if not isinstance(examples, list):
+            raise SeedError(f"{examples_path} must hold a JSON list of examples")
+    rules: list[str] = []
+    if rules_path.exists():
+        try:
+            rules = [line.strip() for line in rules_path.read_text(encoding="utf-8").splitlines() if line.strip()]
+        except OSError as exc:
+            raise SeedError(f"can't read {rules_path}: {exc}") from exc
+    return examples, rules
+
+
+def _seed_example(raw, date: str) -> tuple[dict | None, str]:
+    """Sanitize one seed example like judge output. Returns (example, "") or (None, why)."""
+    if not isinstance(raw, dict):
+        return None, "it is not a JSON object"
+    title = str(raw.get("title") or "").strip()
+    is_ad = raw.get("is_ad")
+    ad_type = raw.get("ad_type") or ("not_ad" if is_ad is False else "")
+    if not title or not isinstance(is_ad, bool) or ad_type not in AD_TYPES or is_ad != (ad_type != "not_ad"):
+        return None, "it needs a title, a boolean is_ad and an ad_type that fits it"
+    ex = {
+        "id": str(raw.get("id") or "seed-" + (re.sub(r"[^a-z0-9]+", "-", title.casefold()).strip("-") or "item")),
+        "title": title,
+        "summary": str(raw.get("summary") or "")[:SUMMARY_CHARS],
+        "source": str(raw.get("source") or ""),
+        "link": domain_only(str(raw.get("link") or "")),
+        "is_ad": is_ad,
+        "ad_type": ad_type,
+        "notes": str(raw.get("notes") or ""),
+        "added": str(raw.get("added") or date),
+    }
+    problem = _modelfile_problem(ex["title"], ex["summary"], ex["notes"])
+    return (None, problem) if problem else (ex, "")
+
+
 def _modelfile_problem(*texts: str) -> str | None:
     for text in texts:
         for bad in _FORBIDDEN:
@@ -153,6 +220,7 @@ class _Mistake:
     record: AdRecord
     verdict: AdVerdict
     second: bool | None  # None when no second opinion was needed
+    unusable: bool = False  # the second opinion's reply was malformed, counted as a disagreement
 
 
 @dataclass
@@ -160,6 +228,7 @@ class _AdPlan:
     examples: list[dict]  # the full candidate learned list
     rules: str
     new_examples: list[dict]
+    example_keys: dict[str, str] = field(default_factory=dict)  # new example id -> its record key
 
 
 @dataclass
@@ -175,7 +244,6 @@ class _Report:
     no_evidence: bool = False
     bad_lines: int = 0
     judged_ads: int = 0
-    heuristic_skipped: int = 0
     over_cap: int = 0
     dedup_batches: int = 0
     dedup_skipped: int = 0
@@ -192,6 +260,9 @@ class _Report:
     case_titles: dict[str, str] = field(default_factory=dict)
     apply_lines: list[str] = field(default_factory=list)
     cleanup_lines: list[str] = field(default_factory=list)
+    blocker_lines: list[str] = field(default_factory=list)
+    seed_dir: Path | None = None
+    seed_lines: list[str] = field(default_factory=list)
     ads_status: str = "no change proposed"
     undo_status: str = ""
     dedup_status: str = "no change proposed"
@@ -218,7 +289,8 @@ class _Report:
     def render(self) -> str:
         if self.no_evidence:
             extra = f" ({self.bad_lines} bad evidence lines skipped)" if self.bad_lines else ""
-            return f"Tuning report {self.date}: no evidence for this day, nothing to tune{extra}.\n"
+            seed = f" The seed in {self.seed_dir} was not used." if self.seed_dir else ""
+            return f"Tuning report {self.date}: no evidence for this day, nothing to tune{extra}.{seed}\n"
 
         out = [f"# Tuning report {self.date}", ""]
         if self.error:
@@ -228,7 +300,6 @@ class _Report:
 
         out += ["## Evidence", "",
                 f"- Ad-gate decisions judged: {self.judged_ads}.",
-                f"- Title-phrase removals skipped: {self.heuristic_skipped}.",
                 f"- Decisions over the cap of items per run: {self.over_cap}.",
                 f"- Dedup batches judged: {self.dedup_batches}.",
                 f"- Bad evidence lines skipped: {self.bad_lines}.", ""]
@@ -238,7 +309,9 @@ class _Report:
             out.append("None found.")
         for m in self.mistakes:
             label = "an ad" if m.verdict.is_ad else "not an ad"
-            if m.second is None:
+            if m.unusable:
+                second = "no usable reply, counted as a disagreement, so the change was dropped"
+            elif m.second is None:
                 second = "not needed, the change keeps more"
             else:
                 second = "agreed" if m.second else "disagreed, so the change was dropped"
@@ -260,6 +333,14 @@ class _Report:
         out += (self.example_lines + self.rule_lines) or ["None."]
         out.append("")
 
+        if self.seed_dir:
+            if self.ads_status == "applied":
+                outcome = "Saved with the rest of the ads change."
+            else:
+                outcome = f"Not saved: the ads change was {self.ads_status}."
+            out += ["## Seed", "", f"From {self.seed_dir}. {outcome}", ""]
+            out += (self.seed_lines or ["- The seed held nothing usable."]) + [""]
+
         out += ["## Dedup cases", ""]
         out += self.dedup_lines or ["None."]
         out += [f"- Cases skipped: {self.dedup_skipped} (the judge used an unknown or repeated id).", ""]
@@ -268,6 +349,8 @@ class _Report:
         out += self._gate_lines("Ads", self.ad_gate, self.ads_status)
         out += self._gate_lines("Dedup", self.dedup_gate, self.dedup_status)
         out.append("")
+        if self.blocker_lines:
+            out += ["Second opinions on the cases that blocked a gate:", ""] + self.blocker_lines + [""]
 
         if self.apply_lines:
             out += ["## Applied", ""] + self.apply_lines + [""]
@@ -291,8 +374,10 @@ class _Report:
 
 class _Tuner:
     def __init__(self, config: Config, date: str, report: _Report, outcome: TuneOutcome,
-                 log: Callable[[str], None] = lambda s: None):
+                 log: Callable[[str], None] = lambda s: None, seed_dir: Path | None = None):
         self.config = config
+        self.seed_dir = Path(seed_dir) if seed_dir else None
+        self.seed_examples: list[dict] = []  # sanitized seed examples in the candidate
         self.tuning = config.tuning
         self.date = date
         self.store = TuningStore(config.tuning.data_dir)
@@ -304,6 +389,7 @@ class _Tuner:
         self.candidate_attempted = False
 
     def run(self) -> None:
+        seed_examples, seed_rules = load_seed(self.seed_dir) if self.seed_dir else ([], [])
         ads, dedups, bad = load_day(self.tuning.data_dir, self.date)
         self.rep.bad_lines = bad
         if not ads and not dedups:
@@ -330,7 +416,7 @@ class _Tuner:
         self.log(f"tune {self.date}: second opinions for {sum(1 for v in judgement.verdicts if not v.correct)} "
                  f"ad mistakes")
         mistakes = self._second_opinions(records, judgement)
-        ad_plan = self._plan_ads(records, judgement, mistakes)
+        ad_plan = self._plan_ads(records, judgement, mistakes, seed_examples, seed_rules)
         dedup_plan = self._plan_dedup(cases)
 
         # Both gates run before either part is applied.
@@ -355,19 +441,24 @@ class _Tuner:
         )
 
     def _select_ads(self, ads: list[AdRecord]) -> list[AdRecord]:
-        judged = [r for r in ads if r.verdict != "heuristic"]
-        self.rep.heuristic_skipped = len(ads) - len(judged)
-        ordered = [r for r in judged if r.verdict == "ad"] + [r for r in judged if r.verdict != "ad"]
+        ordered = [r for r in ads if r.verdict == "ad"] + [r for r in ads if r.verdict != "ad"]
         cap = max(self.tuning.max_items_per_run, 0)
         self.rep.over_cap = max(len(ordered) - cap, 0)
         self.rep.judged_ads = min(len(ordered), cap)
         return ordered[:cap]
 
-    def _second_ad(self, record: AdRecord) -> bool:
+    def _second_ad(self, record: AdRecord) -> bool | None:
+        """The blind second opinion's is_ad, or None when its reply was malformed."""
         self.rep.second_calls += 1
-        agreed, cost = second_opinion_ad(record, self.tuning)
+        is_ad, cost = second_opinion_ad(record, self.tuning)
         self.rep.cost += cost
-        return agreed
+        return is_ad
+
+    def _second_dedup(self, case: DedupCase) -> bool | None:
+        self.rep.second_calls += 1
+        agrees, cost = second_opinion_dedup(case, self.tuning)
+        self.rep.cost += cost
+        return agrees
 
     def _second_opinions(self, records: list[AdRecord], judgement: AdJudgement) -> list[_Mistake]:
         by_key = {r.key: r for r in records}
@@ -377,17 +468,21 @@ class _Tuner:
                 continue
             record = by_key[v.key]
             # A mistake labeled as an ad teaches the gate to remove more, so it needs a second opinion.
-            second = self._second_ad(record) if v.is_ad else None
-            mistakes.append(_Mistake(record, v, second))
+            if v.is_ad:
+                is_ad = self._second_ad(record)
+                mistakes.append(_Mistake(record, v, is_ad is True, unusable=is_ad is None))
+            else:
+                mistakes.append(_Mistake(record, v, None))
         self.rep.mistakes = mistakes
         return mistakes
 
-    def _plan_ads(self, records: list[AdRecord], judgement: AdJudgement,
-                  mistakes: list[_Mistake]) -> _AdPlan | None:
+    def _plan_ads(self, records: list[AdRecord], judgement: AdJudgement, mistakes: list[_Mistake],
+                  seed_examples: list | None = None, seed_rules: list[str] | None = None) -> _AdPlan | None:
         stored = self.store.ad_examples()
         known_ids = {str(e.get("id")) for e in stored}
         cap = self.tuning.max_new_examples_per_day
         new: list[dict] = []
+        example_keys: dict[str, str] = {}
         lines = self.rep.example_lines
 
         def label(e: dict) -> str:
@@ -413,20 +508,40 @@ class _Tuner:
             else:
                 new.append(ex)
                 known_ids.add(str(ex["id"]))
+                example_keys[str(ex["id"])] = m.record.key
                 lines.append(f'- New example "{ex["title"]}" ({label(ex)}, id {ex["id"]}) from a mistake.')
 
-        self._add_balancing_example(records, judgement, new, known_ids, cap)
+        self._add_balancing_example(records, judgement, new, known_ids, cap, example_keys)
+
+        # The seed is not subject to the per-day cap and keeps its own added date.
+        seed: list[dict] = []
+        for raw in seed_examples or []:
+            ex, problem = _seed_example(raw, self.date)
+            title = ex["title"] if ex else (raw.get("title") if isinstance(raw, dict) else raw)
+            if ex is None:
+                self.rep.seed_lines.append(f'- Example "{title}" dropped: {problem}.')
+            elif ex["id"] in known_ids:
+                self.rep.seed_lines.append(f'- Example "{title}" dropped: id {ex["id"]} is already learned.')
+            else:
+                seed.append(ex)
+                known_ids.add(ex["id"])
+                self.rep.seed_lines.append(f'- Example "{title}" ({label(ex)}, id {ex["id"]}) included.')
+        self.seed_examples = seed
+
         by_key = {r.key: r for r in records}
         news = [by_key[v.key] for v in judgement.verdicts if not v.is_ad]
-        rules = self._plan_rules(judgement.proposed_rules, news)
-        if not new and rules is None:
+        proposed = [(rule, self.rep.rule_lines) for rule in judgement.proposed_rules]
+        proposed += [(ProposedRule(text=t, leaning="keep"), self.rep.seed_lines) for t in seed_rules or []]
+        rules = self._plan_rules(proposed, news)
+        if not new and not seed and rules is None:
             return None
-        return _AdPlan(examples=stored + new,
+        return _AdPlan(examples=stored + new + seed,
                        rules=rules if rules is not None else self.store.ad_rules().strip(),
-                       new_examples=new)
+                       new_examples=new + seed, example_keys=example_keys)
 
     def _add_balancing_example(self, records: list[AdRecord], judgement: AdJudgement,
-                               new: list[dict], known_ids: set[str], cap: int) -> None:
+                               new: list[dict], known_ids: set[str], cap: int,
+                               example_keys: dict[str, str]) -> None:
         """Add one correctly handled item of the minority label, so a day's
         examples don't all push the gate the same way."""
         if not new or len(new) >= cap:
@@ -445,52 +560,61 @@ class _Tuner:
             if str(ex["id"]) in known_ids or _modelfile_problem(ex["title"], ex["summary"], ex["notes"]):
                 continue
             kind = "ad" if want_ad else "not ad"
-            if want_ad and not self._second_ad(record):
+            if want_ad and self._second_ad(record) is not True:
                 self.rep.example_lines.append(
-                    f'- Balancing example "{ex["title"]}" ({kind}) dropped: the second opinion disagreed.')
+                    f'- Balancing example "{ex["title"]}" ({kind}) dropped: the second opinion disagreed '
+                    "or gave no usable reply.")
                 return
             new.append(ex)
+            example_keys[str(ex["id"])] = record.key
             self.rep.example_lines.append(
                 f'- Balancing example "{ex["title"]}" ({kind}, id {ex["id"]}), handled correctly today.')
             return
         self.rep.example_lines.append(
             f"- No correctly handled {'ad' if want_ad else 'non-ad'} from today to balance the new examples.")
 
-    def _plan_rules(self, proposed: list[ProposedRule], news: list[AdRecord]) -> str | None:
+    def _plan_rules(self, proposed: list[tuple[ProposedRule, list[str]]], news: list[AdRecord]) -> str | None:
         """Return the candidate rules text, or None when no rule was added.
-        news is today's judged items the judge labeled not ads."""
+        Each rule comes with the report list its outcome goes to. news is
+        today's judged items the judge labeled not ads."""
         rules = self.store.ad_rules().strip()
         limit = self.tuning.max_rules_chars
         added = False
-        for rule in proposed:
+        for rule, lines in proposed:
             text = rule.text.strip()
-            where = f'- Rule ({rule.leaning}) "{text}"'
+            leaning = "remove" if _SAYS_AD.search(text) else rule.leaning
+            where = f'- Rule ({leaning}) "{text}"'
+            if leaning != rule.leaning:
+                where += " (treated as remove-leaning: it says is_ad: true)"
             problem = _modelfile_problem(text)
             if problem:
-                self.rep.rule_lines.append(f"{where} dropped: {problem}.")
+                lines.append(f"{where} dropped: {problem}.")
                 continue
             if text in rules:
-                self.rep.rule_lines.append(f"{where} dropped: already learned.")
+                lines.append(f"{where} dropped: already learned.")
                 continue
             joined = f"{rules}\n{text}" if rules else text
             if len(joined) > limit:
-                self.rep.rule_lines.append(
-                    f"{where} dropped: the learned rules would reach {len(joined)} characters, over the "
-                    f"limit of {limit}.")
+                lines.append(f"{where} dropped: the learned rules would reach {len(joined)} characters, "
+                             f"over the limit of {limit}.")
                 continue
-            if rule.leaning == "remove":
+            if leaning == "remove":
+                if not news:
+                    lines.append(f"{where} dropped: it makes the gate remove more, and no item from today "
+                                 "was labeled not an ad, so there is nothing to check it against.")
+                    continue
                 self.rep.second_calls += 1
                 approved, cost = second_opinion_rule(text, news, self.tuning)
                 self.rep.cost += cost
                 if not approved:
-                    self.rep.rule_lines.append(
-                        f"{where} dropped: it makes the gate remove more, and the second opinion did not "
-                        f"approve it against {min(len(news), RULE_CHECK_ITEMS)} of today's news items.")
+                    lines.append(f"{where} dropped: it makes the gate remove more, and the second opinion "
+                                 f"did not approve it against {min(len(news), RULE_CHECK_ITEMS)} of today's "
+                                 "news items.")
                     continue
                 where += " (second opinion approved)"
             rules = joined
             added = True
-            self.rep.rule_lines.append(f"{where} proposed.")
+            lines.append(f"{where} proposed.")
         return rules if added else None
 
     def _plan_dedup(self, cases: list[DedupCase]) -> _DedupPlan | None:
@@ -501,11 +625,10 @@ class _Tuner:
             note = f" {case.note.strip().rstrip('.')}." if case.note.strip() else ""
             where = f"- {case.kind}: {case.titles}, expected groups {case.expected_groups}.{note}"
             if case.kind == "missed_duplicate":
-                self.rep.second_calls += 1
-                agreed, cost = second_opinion_dedup(case, self.tuning)
-                self.rep.cost += cost
-                if not agreed:
-                    self.rep.dedup_lines.append(f"{where} Second opinion: disagreed, so it was dropped.")
+                agreed = self._second_dedup(case)
+                if agreed is not True:
+                    why = "disagreed" if agreed is False else "gave no usable reply"
+                    self.rep.dedup_lines.append(f"{where} Second opinion: {why}, so it was dropped.")
                     continue
                 second = "agreed"
             else:
@@ -535,8 +658,12 @@ class _Tuner:
             for e in examples:
                 cases.append(Case(id=f"{prefix}:{e['id']}", title=e["title"], text=e["summary"],
                                   expected=bool(e["is_ad"]), today_mistake=False, countable=True))
+        for e in self.seed_examples:
+            cases.append(Case(id=f"seed:{e['id']}", title=e["title"], text=e["summary"],
+                              expected=bool(e["is_ad"]), today_mistake=False, countable=True))
         disputed = {m.record.key for m in mistakes if m.second is False}
         by_key = {r.key: r for r in records}
+        today: dict[str, AdRecord] = {}
         for v in judgement.verdicts:
             record = by_key[v.key]
             if record.key in disputed:
@@ -548,6 +675,7 @@ class _Tuner:
             cases.append(Case(id=f"today:{record.key[:8]}", title=record.title, text=record.text_sent,
                               expected=expected, today_mistake=mistake,
                               countable=v.visible_in_excerpt if mistake else True))
+            today[cases[-1].id] = record
         self.rep.case_titles.update({c.id: c.title for c in cases})
         self.log(f"tune {self.date}: ads gate, {len(cases)} cases")
 
@@ -560,7 +688,54 @@ class _Tuner:
                     predict_ads(self.candidate, [c])[0] == c.expected)
 
         candidate_ok = stabilize(current_ok, candidate_ok, rerun)
-        return decide(cases, current_ok, candidate_ok)
+        result = decide(cases, current_ok, candidate_ok)
+        expected = {c.id: c.expected for c in cases}
+
+        def check(case_id: str) -> bool | None:
+            is_ad = self._second_ad(today[case_id])
+            return None if is_ad is None else is_ad == expected[case_id]
+
+        result, gone = self._settle_blockers("Ads", result, cases, current_ok, candidate_ok,
+                                             {cid: check for cid in today})
+        if gone:
+            keys = {today[cid].key for cid in gone}
+            drop = {eid for eid, key in plan.example_keys.items() if key in keys}
+            if drop:
+                plan.examples = [e for e in plan.examples if str(e.get("id")) not in drop]
+                plan.new_examples = [e for e in plan.new_examples if str(e.get("id")) not in drop]
+                self.rep.blocker_lines.append(
+                    f"- Dropped from the saved change, since their label is disputed: {', '.join(sorted(drop))}.")
+        return result
+
+    def _settle_blockers(self, name: str, result: GateResult, cases: list[Case], current_ok: list[bool],
+                         candidate_ok: list[bool],
+                         checks: dict[str, Callable[[str], bool | None]]) -> tuple[GateResult, set[str]]:
+        """When a gate rejects and every broken case came from today's judge,
+        ask a blind second opinion about each. checks maps a today case id to
+        a call returning True when the second opinion agrees with the case's
+        label, False when it disagrees, and None for a malformed reply. A
+        disputed case is dropped and decide runs again on the rest, reusing
+        the ok lists. Returns (result, disputed ids)."""
+        if result.accepted or not result.broken or not all(b in checks for b in result.broken):
+            return result, set()
+        self.log(f"tune {self.date}: second opinions on {len(result.broken)} {name.lower()} gate blockers")
+        disputed: set[str] = set()
+        for case_id in result.broken:
+            agrees = checks[case_id](case_id)
+            where = f"- {name}: {case_id} ({self.rep.case_titles.get(case_id, '')})"
+            if agrees is False:
+                disputed.add(case_id)
+                self.rep.blocker_lines.append(f"{where}: disputed, not counted.")
+            elif agrees is None:
+                self.rep.blocker_lines.append(f"{where}: no usable second opinion, so it still blocks.")
+            else:
+                self.rep.blocker_lines.append(f"{where}: the second opinion agrees with the first judge, "
+                                              "so it still blocks.")
+        if not disputed:
+            return result, set()
+        keep = [i for i, c in enumerate(cases) if c.id not in disputed]
+        result = decide([cases[i] for i in keep], [current_ok[i] for i in keep], [candidate_ok[i] for i in keep])
+        return result, disputed
 
     def _gate_dedup(self, plan: _DedupPlan) -> GateResult:
         cases = [DedupCase(titles=list(c["titles"]), expected_groups=[list(g) for g in c["expected_groups"]],
@@ -583,7 +758,17 @@ class _Tuner:
             return ok(current_block, [cases[i]])[0], ok(candidate_block, [cases[i]])[0]
 
         candidate_ok = stabilize(current_ok, candidate_ok, rerun)
-        return decide(meta, current_ok, candidate_ok)
+        result = decide(meta, current_ok, candidate_ok)
+        checks = {m.id: (lambda cid: self._second_dedup(cases[int(cid.split(":")[1])]))
+                  for m in meta if m.today_mistake}
+        result, gone = self._settle_blockers("Dedup", result, meta, current_ok, candidate_ok, checks)
+        if gone:
+            drop = {int(cid.split(":")[1]) for cid in gone}
+            plan.cases = [c for i, c in enumerate(plan.cases) if i not in drop]
+            plan.new_count -= len(drop)
+            self.rep.blocker_lines.append(
+                f"- Dropped {len(drop)} disputed dedup cases from the saved change.")
+        return result
 
     def _undo(self, snap: Path, rebuild: bool) -> None:
         """Put the learned files (and, with rebuild, the live model) back as the snapshot has them."""
@@ -644,8 +829,13 @@ class _Tuner:
             self.rep.dedup_status = "applied"
 
 
-def run_tune(config: Config, date: str, log: Callable[[str], None] | None = None) -> TuneOutcome:
+def run_tune(config: Config, date: str, log: Callable[[str], None] | None = None,
+             seed_dir: Path | None = None) -> TuneOutcome:
     """Run the daily tune for date. Never raises: every failure ends up in the report.
+
+    seed_dir holds learned_ad_examples.json and/or learned_ad_rules.txt to
+    propose alongside the judge's findings. The seed goes through the gate and
+    is saved only if the ads change is accepted.
 
     The default log is the scan's timestamped, flushing log line, so `tail -f` follows the run.
     """
@@ -653,9 +843,9 @@ def run_tune(config: Config, date: str, log: Callable[[str], None] | None = None
         from newsradar.cli import log as scan_log
         log = scan_log
     store = TuningStore(config.tuning.data_dir)
-    report = _Report(date=date, config_path=config.config_path)
+    report = _Report(date=date, config_path=config.config_path, seed_dir=Path(seed_dir) if seed_dir else None)
     outcome = TuneOutcome(False, False, "", store.report_path(date))
-    tuner = _Tuner(config, date, report, outcome, log)
+    tuner = _Tuner(config, date, report, outcome, log, seed_dir)
     try:
         tuner.run()
     except _RUN_ERRORS as exc:

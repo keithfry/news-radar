@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 import pytest
 
 from newsradar import cli
@@ -82,11 +84,22 @@ def test_scan_records_ad_decisions_when_tuning_enabled(monkeypatch, tmp_path, _c
     assert ads[0].source_type == "feed" and ads[0].reason == "pitch"
 
 
-def test_heuristic_removal_and_linked_source_type(monkeypatch, tmp_path, _clean_cache):
+def test_ad_phrase_title_goes_to_the_model_and_linked_source_type(monkeypatch, tmp_path, _clean_cache):
     monkeypatch.setattr(cli, "classify_ad", lambda *a: (False, ""))
     item = {"title": "Gadgets: shop now", "link": "https://x/2", "source": "X", "_from_email_link": True}
     ads = _scan(monkeypatch, tmp_path, item)
-    assert [(a.verdict, a.source_type) for a in ads] == [("heuristic", "linked_article")]
+    assert [(a.verdict, a.source_type) for a in ads] == [("not_ad", "linked_article")]
+
+
+def test_load_day_skips_old_heuristic_records(tmp_path):
+    day = tmp_path / "evidence" / "2026-11-20"
+    day.mkdir(parents=True)
+    old = {"kind": "ad", "key": "h", "date": "2026-11-20", "topic": "AI", "title": "Buy now", "link": "",
+           "source": "X", "source_type": "feed", "text_sent": "", "text_full": "", "verdict": "heuristic",
+           "reason": "title phrase", "model": ""}
+    (day / "AI.jsonl").write_text(json.dumps(old) + "\n" + json.dumps({**old, "key": "k", "verdict": "ad"}) + "\n")
+    ads, dedups, bad = load_day(tmp_path, "2026-11-20")
+    assert [a.key for a in ads] == ["k"] and dedups == [] and bad == 0
 
 
 def test_no_evidence_when_recorder_is_none(monkeypatch, tmp_path, _clean_cache):

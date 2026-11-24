@@ -28,7 +28,7 @@ class AdRecord:
     source_type: str
     text_sent: str
     text_full: str
-    verdict: str  # "ad", "not_ad" or "heuristic"
+    verdict: str  # "ad" or "not_ad"
     reason: str
     model: str
 
@@ -92,7 +92,11 @@ class EvidenceRecorder:
 
 
 def load_day(data_dir: Path, date: str) -> tuple[list[AdRecord], list[DedupRecord], int]:
-    """Load a day's records. The last record per key wins. Returns bad lines skipped."""
+    """Load a day's records. The last record per key wins. Returns bad lines skipped.
+
+    Evidence written before the title-phrase check was removed can hold ad
+    records with verdict "heuristic". They are skipped and not counted.
+    """
     ads: dict[str, AdRecord] = {}
     dedups: dict[str, DedupRecord] = {}
     bad = 0
@@ -108,6 +112,8 @@ def load_day(data_dir: Path, date: str) -> tuple[list[AdRecord], list[DedupRecor
             try:
                 obj = json.loads(line)
                 kind = obj.get("kind")
+                if kind == "ad" and obj.get("verdict") == "heuristic":
+                    continue
                 if kind == "ad":
                     rec = AdRecord(**{k: v for k, v in obj.items() if k in ad_fields})
                     ads[rec.key] = rec

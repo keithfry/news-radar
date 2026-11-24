@@ -14,6 +14,7 @@ Usage:
     newsradar --config config.toml --refresh-token              # re-authenticate with Gmail, then exit
     newsradar ad-detector install                                # install the ad-detector Ollama model
     newsradar tune --config config.toml [--date YYYY-MM-DD]       # tune the ad gate and dedup from the day's evidence
+    newsradar tune --config config.toml --include-seed DIR        # also propose the seed files in DIR through the gate
     newsradar tune --config config.toml --rebuild                 # rebuild ad-detector from base plus learned data
     newsradar tune --config config.toml --rollback YYYY-MM-DD     # restore that day's snapshot and rebuild
 """
@@ -83,41 +84,6 @@ def log(msg: str) -> None:
 # Single-item processor — runs in a thread pool worker
 # ---------------------------------------------------------------------------
 
-_AD_PHRASES = {
-    "shop now", "buy now", "add to cart", "free shipping", "order now",
-    "gift idea", "gift guide", "on sale", "discount code",
-    "promo code", "coupon", "limited time", "shop our", "browse our",
-    "new arrivals", "bestseller", "best seller",
-    "register now", "register for free", "register today", "save your seat",
-    "save my seat", "reserve your spot", "claim your spot",
-    "join us live", "join us for a", "join our webinar", "join our live",
-    "free webinar", "live webinar", "upcoming webinar",
-}
-
-_WEBINAR_PHRASES = {
-    "webinar", "web seminar", "virtual event", "online event",
-    "register to attend", "register for this", "register at",
-    "upcoming event", "live session", "live demo",
-}
-
-
-def _is_advertisement(title: str) -> bool:
-    """Flag a title that contains a stock ad phrase.
-
-    Only the title is checked. Fetched article bodies include page chrome,
-    such as a site's event promo with "register now", and normal news quotes
-    dollar figures, so body text misfired on real articles. The LLM ad gate
-    reads the body instead.
-    """
-    lowered = title.lower()
-    return any(phrase in lowered for phrase in _AD_PHRASES)
-
-
-def _is_webinar_summary(summary: str) -> bool:
-    lowered = summary.lower()
-    return any(phrase in lowered for phrase in _WEBINAR_PHRASES)
-
-
 # Ad verdicts depend only on the item, not the topic. Emails and linked
 # articles go through every topic, so remember each verdict for the run.
 _ad_verdicts: dict[tuple[str, str, str], tuple[bool, str]] = {}
@@ -161,19 +127,8 @@ def _process_one(
         return None
     log(f"  [{idx}/{total}] {label}: {title[:70]}")
 
-    # arXiv papers are never ads, so they skip both ad checks.
+    # arXiv papers are never ads, so they skip the ad gate.
     arxiv = is_arxiv(item.get("source", ""))
-
-    if not arxiv and _is_advertisement(title):
-        log(f"    [{idx}] → skip (advertisement)")
-        if _evidence is not None:
-            _evidence.record_ad(
-                topic=topic.name, item=item, title=title, text=existing_text,
-                source_type=_evidence_source_type(item, source_type),
-                verdict="heuristic", reason="title phrase", model="",
-            )
-        removed.append(removal_record(item, "advertisement"))
-        return None
 
     if models.ad_gate_enabled and not arxiv:
         is_ad, ad_reason = _classify_ad_once(title, existing_text[:1000], models.ad_detector_model)
@@ -201,11 +156,6 @@ def _process_one(
 
     log(f"    [{idx}] → summarizing...")
     summary_text = summarize(title, existing_text, models.summarize_model)
-
-    if _is_webinar_summary(summary_text):
-        log(f"    [{idx}] → skip (webinar/promotional event)")
-        removed.append(removal_record(item, "webinar"))
-        return None
 
     log(f"    [{idx}] → tagging...")
     tags = tag(title, summary_text, models.summarize_model)
@@ -678,6 +628,9 @@ def _build_parser() -> argparse.ArgumentParser:
     tune_parser = subparsers.add_parser("tune", help="Tune the ad gate and dedup check from the day's evidence")
     tune_parser.add_argument("--config", type=str, required=True, help="Path to the news-radar TOML config file")
     tune_parser.add_argument("--date", type=_iso_date, default=None, help="Evidence date YYYY-MM-DD (default: today in ET)")
+    tune_parser.add_argument("--include-seed", type=Path, default=None, metavar="DIR",
+                             help="Propose the learned_ad_examples.json and learned_ad_rules.txt in DIR "
+                                  "with the day's findings; they are saved only if the gate accepts")
     tune_action = tune_parser.add_mutually_exclusive_group()
     tune_action.add_argument("--rebuild", action="store_true", help="Rebuild the live ad-detector from base plus learned data, then exit")
     tune_action.add_argument("--rollback", type=_iso_date, default=None, metavar="YYYY-MM-DD",
@@ -698,6 +651,8 @@ def _iso_date(value: str) -> str:
 def _run_tune_command(args: argparse.Namespace, parser: argparse.ArgumentParser) -> None:
     from .tuning import tuner
 
+    if args.include_seed and (args.rebuild or args.rollback):
+        parser.error("--include-seed goes with a daily run, not --rebuild or --rollback")
     config = load_config(args.config)
     if args.rebuild:
         tuner.rebuild_live_model(config)
@@ -713,7 +668,7 @@ def _run_tune_command(args: argparse.Namespace, parser: argparse.ArgumentParser)
     if not config.tuning.enabled:
         print("Tuning is off ([tuning] enabled = false); nothing to do.")
         return
-    tuner.run_tune(config, args.date or datetime.now(ET).strftime("%Y-%m-%d"))
+    tuner.run_tune(config, args.date or datetime.now(ET).strftime("%Y-%m-%d"), seed_dir=args.include_seed)
 
 
 def _add_run_args(parser: argparse.ArgumentParser) -> None:

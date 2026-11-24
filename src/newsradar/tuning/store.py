@@ -12,6 +12,8 @@ from urllib.parse import urlparse
 DEDUP_CASES_IN_PROMPT = 12
 _MODELFILE_NAME = "Modelfile"
 _DEDUP_HEADING = "LEARNED EXAMPLES (past mistakes to avoid):"
+AD_EXAMPLES_FILE = "learned_ad_examples.json"
+AD_RULES_FILE = "learned_ad_rules.txt"
 _DATED_NAME = re.compile(r"(\d{4}-\d{2}-\d{2})(?:-(\d+))?")
 
 
@@ -43,8 +45,8 @@ def domain_only(url: str) -> str:
 class TuningStore:
     def __init__(self, data_dir: Path):
         self.root = Path(data_dir) / "tuning"
-        self._ad_examples = self.root / "learned_ad_examples.json"
-        self._ad_rules = self.root / "learned_ad_rules.txt"
+        self._ad_examples = self.root / AD_EXAMPLES_FILE
+        self._ad_rules = self.root / AD_RULES_FILE
         self._dedup_cases = self.root / "learned_dedup_cases.json"
 
     def _read_json(self, path: Path) -> list[dict]:

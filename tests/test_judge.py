@@ -148,18 +148,30 @@ def test_skipped_counts_add_across_batches(fake_claude):
     assert out.skipped == 2 and [v.key for v in out.verdicts] == ["k1", "k2", "k4", "k5"]
 
 
-@pytest.mark.parametrize("gate,is_ad,sent_correct,expected", [
-    ("not_ad", True, True, False),   # the model calls a mistake correct: code says mistake
-    ("not_ad", False, False, True),  # the model calls a right verdict wrong: code says correct
-    ("ad", True, False, True),
-    ("ad", False, True, False),
+@pytest.mark.parametrize("gate,is_ad,expected", [
+    ("not_ad", True, False), ("not_ad", False, True), ("ad", True, True), ("ad", False, False),
 ])
-def test_correct_is_derived_from_label_and_gate(fake_claude, gate, is_ad, sent_correct, expected):
+def test_correct_is_derived_from_label_and_gate(fake_claude, gate, is_ad, expected):
     v = {**verdict("r0"), "is_ad": is_ad, "ad_type": "sponsor_content" if is_ad else "not_ad",
-         "correct": sent_correct, "example": None}
+         "correct": expected, "example": None}
     fake_claude.reply = reply_for(v)
     out = judge_ads([rec("k1", verdict=gate)], TUNING).verdicts[0]
     assert out.correct is expected and (out.example is None) is expected
+
+
+def test_sent_correct_that_contradicts_the_derived_one_is_skipped(fake_claude):
+    # r1's verdict was written for its neighbour: it calls a kept item an ad and says the gate was right.
+    shifted = {**verdict("r1"), "is_ad": True, "ad_type": "sponsor_content", "correct": True}
+    fake_claude.reply = reply_for(verdict("r0"), shifted, verdict("r2"))
+    out = judge_ads([rec("a"), rec("b"), rec("c")], TUNING)
+    assert [v.key for v in out.verdicts] == ["a", "c"] and out.skipped == 1
+
+
+def test_mostly_shifted_batch_raises(fake_claude):
+    shifted = lambda i: {**verdict(i), "is_ad": True, "ad_type": "sponsor_content", "correct": True}
+    fake_claude.reply = reply_for(shifted("r0"), shifted("r1"), verdict("r2"))
+    with pytest.raises(JudgeError, match="no usable verdict"):
+        judge_ads([rec("a"), rec("b"), rec("c")], TUNING)
 
 
 @pytest.mark.parametrize("is_ad,ad_type", [(True, "not_ad"), (False, "sponsor_content"), (False, "made_up"),
@@ -282,16 +294,15 @@ def test_failed_cli_call_carries_earlier_cost(fake_claude):
 
 
 @pytest.mark.parametrize("call", ["ad", "dedup"])
-def test_second_opinion_bad_reply_keeps_cost(fake_claude, call):
+def test_second_opinion_bad_reply_is_none_with_cost(fake_claude, call):
     fake_claude.cost = 0.05
     fake_claude.reply = lambda p: {"is_ad": True, "ad_type": "not_ad", "reason": "x", "groups": [[0, 9]]}
-    with pytest.raises(JudgeError) as exc:
-        if call == "ad":
-            second_opinion_ad(rec("k1"), TUNING)
-        else:
-            second_opinion_dedup(DedupCase(titles=["A", "B"], expected_groups=[[0, 1]],
-                                           kind="missed_duplicate", note=""), TUNING)
-    assert exc.value.cost_usd == pytest.approx(0.05)
+    if call == "ad":
+        out = second_opinion_ad(rec("k1"), TUNING)
+    else:
+        out = second_opinion_dedup(DedupCase(titles=["A", "B"], expected_groups=[[0, 1]],
+                                             kind="missed_duplicate", note=""), TUNING)
+    assert out == (None, 0.05)
 
 
 def test_no_records_makes_no_call(fake_claude):
@@ -428,10 +439,9 @@ def test_second_opinion_dedup_prompt_hides_expected_groups_and_note(fake_claude)
     assert "A launches" in prompt
 
 
-def test_second_opinion_dedup_bad_index_raises(fake_claude):
+def test_second_opinion_dedup_bad_index_is_none(fake_claude):
     fake_claude.reply = lambda p: {"groups": [[0, 9]], "reason": "x"}
-    with pytest.raises(JudgeError):
-        second_opinion_dedup(CASE, TUNING)
+    assert second_opinion_dedup(CASE, TUNING)[0] is None
 
 
 # ---------- second_opinion_rule ----------

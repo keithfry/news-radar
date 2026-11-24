@@ -53,8 +53,8 @@ Scheduling templates for running this on a timer are in `examples/launchd/`
 
 ## Ad detection
 
-Before classification, every item passes through a cheap heuristic filter and
-then an LLM-based ad/spam gate (the packaged `ad-detector` Ollama model, or
+Before classification, every item except arXiv papers passes through an
+LLM-based ad/spam gate (the packaged `ad-detector` Ollama model, or
 any model you configure via `[models] ad_detector_model`). See
 [`src/newsradar/ad_detector/AD_DETECTION.md`](src/newsradar/ad_detector/AD_DETECTION.md)
 for how the gate works, how to disable it, and how to retrain it on your own

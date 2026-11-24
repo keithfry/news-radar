@@ -223,10 +223,11 @@ def _parse_ad_batch(batch: list[AdRecord], reply: dict,
                     what: str) -> tuple[list[AdVerdict], list[ProposedRule], int]:
     """Map a reply's r0..rN ids back to the batch. Returns (verdicts in batch
     order, rules, records skipped). A record is skipped when it has no verdict,
-    its id is repeated, or its is_ad and ad_type disagree. A verdict with an
-    unknown id is ignored. `correct` is derived from the label and the gate's
-    verdict, not read from the reply. A mistake without an example gets one
-    built from the record."""
+    its id is repeated, its is_ad and ad_type disagree, or the reply's
+    `correct` contradicts the one derived from the label and the gate's
+    verdict. That last check catches verdicts shifted onto a neighbouring
+    record. A verdict with an unknown id is ignored. The derived `correct` is
+    the one used. A mistake without an example gets one built from the record."""
     by_id = {f"r{i}": r for i, r in enumerate(batch)}
     raw_verdicts = reply.get("verdicts")
     if not isinstance(raw_verdicts, list):
@@ -245,6 +246,8 @@ def _parse_ad_batch(batch: list[AdRecord], reply: dict,
         if not _label_ok(raw.get("is_ad"), raw.get("ad_type")):
             continue
         correct = raw["is_ad"] == (record.verdict == "ad")
+        if isinstance(raw.get("correct"), bool) and raw["correct"] != correct:
+            continue  # the verdict likely belongs to another record
         v = AdVerdict(key=record.key, correct=correct, is_ad=raw["is_ad"], ad_type=raw["ad_type"],
                       reason=str(raw.get("reason") or ""),
                       visible_in_excerpt=bool(raw.get("visible_in_excerpt")), example=None)
@@ -286,14 +289,17 @@ def judge_ads(records: list[AdRecord], tuning: TuningConfig, batch_size: int = 2
     return AdJudgement(verdicts=verdicts, proposed_rules=rules, cost_usd=meter.cost, skipped=skipped)
 
 
-def second_opinion_ad(record: AdRecord, tuning: TuningConfig) -> tuple[bool, float]:
-    """Returns (is_ad, cost_usd) from a call that doesn't see the first verdict."""
+def second_opinion_ad(record: AdRecord, tuning: TuningConfig) -> tuple[bool | None, float]:
+    """Returns (is_ad, cost_usd) from a call that doesn't see the first verdict.
+    is_ad is None when the reply's is_ad and ad_type disagree: the caller
+    treats that as a disagreement. A failed call still raises JudgeError."""
     what = f"second opinion on ad {record.key[:8]}"
     payload = json.dumps(_record_json(record, with_verdict=False), indent=2, ensure_ascii=False)
     prompt = f"Decide whether this item is an advertisement.\n\nItem:\n{payload}\n"
     with _metered() as meter:
         reply = _call(prompt, "second_opinion.md", SECOND_AD_SCHEMA, tuning, what, meter)
-        _check_label(reply.get("is_ad"), reply.get("ad_type"), what)
+    if not _label_ok(reply.get("is_ad"), reply.get("ad_type")):
+        return None, meter.cost
     return reply["is_ad"], meter.cost
 
 
@@ -376,12 +382,18 @@ def judge_dedup(records: list[DedupRecord], tuning: TuningConfig) -> tuple[list[
     return cases, meter.cost, skipped
 
 
-def second_opinion_dedup(case: DedupCase, tuning: TuningConfig) -> tuple[bool, float]:
-    """Returns (agrees, cost_usd): agrees when the call finds exactly the case's groups."""
+def second_opinion_dedup(case: DedupCase, tuning: TuningConfig) -> tuple[bool | None, float]:
+    """Returns (agrees, cost_usd): agrees when the call finds exactly the case's
+    groups. agrees is None when the reply's groups are malformed (an index out
+    of range or repeated): the caller treats that as a disagreement. A failed
+    call still raises JudgeError."""
     what = f"second opinion on dedup case {case.titles[:1]!r}"
     payload = json.dumps([{"id": i, "title": t} for i, t in enumerate(case.titles)], indent=2, ensure_ascii=False)
     prompt = f"Group the duplicates among these {len(case.titles)} titles.\n\nTitles:\n{payload}\n"
     with _metered() as meter:
         reply = _call(prompt, "second_opinion.md", SECOND_DEDUP_SCHEMA, tuning, what, meter)
+    try:
         groups = _check_groups(reply.get("groups"), len(case.titles), what)
+    except JudgeError:
+        return None, meter.cost
     return {frozenset(g) for g in groups} == {frozenset(g) for g in case.expected_groups}, meter.cost

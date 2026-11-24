@@ -50,7 +50,7 @@ RECORDS = [
     ad_rec("k_ok_aaaaaaaa", "not_ad", "OpenAI ships a model", source="Decoder"),
     ad_rec("k_fp_aaaaaaaa", "ad", "AI Report issue 42"),        # a false removal
     ad_rec("k_ad_aaaaaaaa", "ad", "Refer a friend and win", source="Hustle"),
-    ad_rec("k_h_aaaaaaaaa", "heuristic", "Sponsored: buy now"),
+    ad_rec("k_h_aaaaaaaaa", "heuristic", "Sponsored: buy now"),  # old evidence; load_day skips it
 ]
 DEDUP = DedupRecord(key="d1", date=DATE, topic="AI",
                     titles=["A launches X", "B raises money", "C ships Y"], dropped=[1])
@@ -83,6 +83,10 @@ class Fakes:
         self.second_cost = 0.01
         self.rule_checks: list[tuple[str, list[AdRecord]]] = []
         self.second_ad_keys: list[str] = []
+        self.second_ad_answers: dict[str, bool | None] = {}  # per record key; else second_opinion_ad
+        self.second_dedup_answers: list[bool | None] = []  # answered in order; then second_opinion_dedup
+        self.candidate_break_ids: set[str] = set()  # case ids the candidate gets wrong
+        self.ad_case_ids: list[str] = []
         self.candidate_fix = False
         self.candidate_break_base = False
         self.dedup_gate_error = False
@@ -132,9 +136,11 @@ class Fakes:
 
     def second_ad(self, record, tuning):
         self.second_ad_keys.append(record.key)
-        return self.second_opinion_ad, self.second_cost
+        return self.second_ad_answers.get(record.key, self.second_opinion_ad), self.second_cost
 
     def second_dedup(self, case, tuning):
+        if self.second_dedup_answers:
+            return self.second_dedup_answers.pop(0), self.second_cost
         return self.second_opinion_dedup, self.second_cost
 
     def second_rule(self, rule_text, records, tuning):
@@ -144,11 +150,14 @@ class Fakes:
     def predict_ads(self, model, cases):
         out = []
         for c in cases:
+            self.ad_case_ids.append(c.id)
             p = (not c.expected) if c.today_mistake else c.expected  # the live gate's behavior
             if model == CANDIDATE:
                 if self.candidate_fix and c.today_mistake:
                     p = c.expected
                 if self.candidate_break_base and c.id.startswith("base:"):
+                    p = not c.expected
+                if c.id in self.candidate_break_ids:
                     p = not c.expected
             out.append(p)
         return out
@@ -388,10 +397,11 @@ def test_mistake_not_visible_in_excerpt_does_not_count(cfg, evidence, fakes):
     assert "not learned" in text
 
 
-def test_heuristic_records_skipped_and_removals_judged_first(cfg, evidence, fakes):
+def test_old_heuristic_records_skipped_and_removals_judged_first(cfg, evidence, fakes):
     cfg.tuning.max_items_per_run = 2
-    run_tune(cfg, DATE, log=lambda s: None)
+    out = run_tune(cfg, DATE, log=lambda s: None)
     assert [r.verdict for r in fakes.judged] == ["ad", "ad"]
+    assert "Decisions over the cap of items per run: 1." in out.report_path.read_text()
 
 
 def test_report_lists_cost_skipped_and_commands(cfg, evidence, fakes):
@@ -459,7 +469,7 @@ def test_rollback_without_snapshot_raises(cfg, fakes):
 
 def test_cli_tune_runs_with_today_by_default(cfg, monkeypatch):
     seen = {}
-    monkeypatch.setattr(tuner, "run_tune", lambda config, date, log=print: seen.update(date=date))
+    monkeypatch.setattr(tuner, "run_tune", lambda config, date, log=print, **kw: seen.update(date=date, **kw))
     monkeypatch.setattr(sys, "argv", ["newsradar", "tune", "--config", str(cfg.config_path)])
     cli.main()
     assert len(seen["date"]) == 10 and seen["date"][4] == "-"
@@ -488,3 +498,184 @@ def test_run_prunes_old_snapshots_and_reports(cfg, fakes):
     assert not (s.root / "snapshots" / "2026-09-01").exists()
     assert (s.root / "snapshots" / "2026-10-01").exists()
     assert not old_report.exists() and out.report_path.exists()
+
+
+# ---------- Task 12: second opinion on blockers ----------
+
+NEWS_CASE = "today:k_ok_aaa"  # "OpenAI ships a model", judged not an ad
+
+
+def test_today_blocker_disputed_by_second_opinion_is_dropped_and_gate_accepts(cfg, evidence, fakes):
+    fakes.candidate_fixes_today_mistake()
+    fakes.candidate_break_ids = {NEWS_CASE}
+    fakes.second_ad_answers = {"k_ok_aaaaaaaa": True}  # the second opinion says it is an ad
+    out = run_tune(cfg, DATE, log=lambda s: None)
+    text = out.report_path.read_text()
+    assert out.ads_applied and "k_ok_aaaaaaaa" in fakes.second_ad_keys
+    assert f"{NEWS_CASE} (OpenAI ships a model): disputed, not counted" in text
+
+
+def test_today_blocker_confirmed_by_second_opinion_still_rejects(cfg, evidence, fakes):
+    fakes.candidate_fixes_today_mistake()
+    fakes.candidate_break_ids = {NEWS_CASE}
+    fakes.second_ad_answers = {"k_ok_aaaaaaaa": False}  # agrees: not an ad
+    out = run_tune(cfg, DATE, log=lambda s: None)
+    assert not out.ads_applied and store(cfg).ad_examples() == []
+    assert "agrees with the first judge, so it still blocks" in out.report_path.read_text()
+
+
+def test_today_blocker_with_unusable_second_opinion_still_rejects(cfg, evidence, fakes):
+    fakes.candidate_fixes_today_mistake()
+    fakes.candidate_break_ids = {NEWS_CASE}
+    fakes.second_ad_answers = {"k_ok_aaaaaaaa": None}
+    out = run_tune(cfg, DATE, log=lambda s: None)
+    assert not out.ads_applied and "no usable second opinion" in out.report_path.read_text()
+
+
+def test_base_blocker_rejects_without_a_second_opinion(cfg, evidence, fakes):
+    fakes.candidate_breaks_a_base_example()
+    fakes.candidate_break_ids = {NEWS_CASE}
+    out = run_tune(cfg, DATE, log=lambda s: None)
+    assert not out.ads_applied
+    assert fakes.second_ad_keys == ["k_ad_aaaaaaaa"]  # only the balancing example's check
+
+
+def test_dedup_blocker_disputed_is_dropped_from_gate_and_saved_cases(cfg, evidence, fakes):
+    miss = DedupCase(titles=["Q one", "Q two"], expected_groups=[[0, 1]], kind="missed_duplicate", note="")
+    fakes.dedup_cases = [WRONG_MERGE, miss]
+    fakes.second_dedup_answers = [True, False]  # agrees when planned, disputes it as a blocker
+    out = run_tune(cfg, DATE, log=lambda s: None)
+    assert out.dedup_applied
+    assert [c["titles"] for c in store(cfg).dedup_cases()] == [WRONG_MERGE.titles]
+    assert "dedup:1 (Q one): disputed, not counted" in out.report_path.read_text()
+
+
+def test_second_opinion_call_failure_on_a_blocker_applies_nothing(cfg, evidence, fakes, monkeypatch):
+    fakes.candidate_fixes_today_mistake()
+    fakes.candidate_break_ids = {NEWS_CASE}
+
+    def fail(record, tuning):
+        if record.key == "k_ok_aaaaaaaa":
+            raise JudgeError("rate limited")
+        return True, 0.0
+
+    monkeypatch.setattr(tuner, "second_opinion_ad", fail)
+    out = run_tune(cfg, DATE, log=lambda s: None)
+    assert not out.ads_applied and "rate limited" in out.report_path.read_text()
+
+
+# ---------- Task 12: the seed goes through the gate ----------
+
+def write_seed(tmp_path, examples=None, rules=None):
+    seed = tmp_path / "seed"
+    seed.mkdir()
+    if examples is not None:
+        (seed / "learned_ad_examples.json").write_text(json.dumps(examples))
+    if rules is not None:
+        (seed / "learned_ad_rules.txt").write_text(rules)
+    return seed
+
+
+SEED_EXAMPLES = [
+    {"id": "seed-1", "title": "AI Report issue as web copy", "summary": "s" * 300,
+     "source": "theaireport.ai", "link": "https://www.theaireport.ai/p/x?ref=abc", "is_ad": False,
+     "ad_type": "not_ad", "notes": "news issue", "added": "2026-11-20"},
+    {"id": "seed-2", "title": "Tech Buzz digest", "summary": "digest", "source": "The Tech Buzz",
+     "link": "", "is_ad": False, "ad_type": "not_ad", "notes": "digest"},
+]
+
+
+def test_seed_is_included_and_saved_on_accept(cfg, evidence, fakes, tmp_path):
+    cfg.tuning.max_new_examples_per_day = 1
+    fakes.candidate_fixes_today_mistake()
+    seed = write_seed(tmp_path, SEED_EXAMPLES, "Judge the whole item.\n")
+    out = run_tune(cfg, DATE, log=lambda s: None, seed_dir=seed)
+    by_id = {e["id"]: e for e in store(cfg).ad_examples()}
+    assert out.ads_applied and {"seed-1", "seed-2"} <= set(by_id)
+    assert any(i.startswith("the-ai-report") for i in by_id)  # the judge's example, despite the cap of 1
+    assert by_id["seed-1"]["added"] == "2026-11-20" and by_id["seed-2"]["added"] == DATE
+    assert len(by_id["seed-1"]["summary"]) == 200 and by_id["seed-1"]["link"] == "https://www.theaireport.ai/"
+    assert "Judge the whole item." in store(cfg).ad_rules()
+    assert "seed:seed-1" in fakes.ad_case_ids
+    text = out.report_path.read_text()
+    assert "## Seed" in text and "Saved with the rest" in text
+
+
+def test_seed_is_not_saved_on_reject(cfg, evidence, fakes, tmp_path):
+    fakes.candidate_breaks_a_base_example()
+    seed = write_seed(tmp_path, SEED_EXAMPLES, "Judge the whole item.\n")
+    out = run_tune(cfg, DATE, log=lambda s: None, seed_dir=seed)
+    assert not out.ads_applied and store(cfg).ad_examples() == [] and store(cfg).ad_rules() == ""
+    assert "Not saved: the ads change was rejected" in out.report_path.read_text()
+
+
+def test_seed_rule_with_triple_quotes_is_dropped(cfg, evidence, fakes, tmp_path):
+    fakes.candidate_fixes_today_mistake()
+    seed = write_seed(tmp_path, rules='Bad """ rule.\nJudge the whole item.\n')
+    out = run_tune(cfg, DATE, log=lambda s: None, seed_dir=seed)
+    rules = store(cfg).ad_rules()
+    assert out.ads_applied and "Judge the whole item." in rules and '"""' not in rules
+    seed_section = out.report_path.read_text().split("## Seed")[1].split("## ")[0]
+    assert "Bad" in seed_section and "dropped" in seed_section
+
+
+def test_seed_rule_saying_is_ad_true_goes_through_the_rule_check(cfg, evidence, fakes, tmp_path):
+    fakes.candidate_fixes_today_mistake()
+    fakes.second_opinion_rule = False
+    seed = write_seed(tmp_path, rules="Output is_ad: true only when the whole item is a pitch.\n")
+    run_tune(cfg, DATE, log=lambda s: None, seed_dir=seed)
+    assert [r for r, _ in fakes.rule_checks] == ["Output is_ad: true only when the whole item is a pitch."]
+    assert store(cfg).ad_rules() == ""
+
+
+def test_missing_seed_folder_applies_nothing(cfg, evidence, fakes, tmp_path):
+    fakes.candidate_fixes_today_mistake()
+    out = run_tune(cfg, DATE, log=lambda s: None, seed_dir=tmp_path / "nope")
+    assert not out.ads_applied and "does not exist" in out.report_path.read_text()
+
+
+def test_cli_parses_include_seed(cfg, monkeypatch):
+    p = cli._build_parser()
+    a = p.parse_args(["tune", "--config", "c.toml", "--include-seed", "data/tuning/seed"])
+    assert a.include_seed == Path("data/tuning/seed")
+    seen = {}
+    monkeypatch.setattr(tuner, "run_tune", lambda config, date, log=print, **kw: seen.update(kw))
+    monkeypatch.setattr(sys, "argv", ["newsradar", "tune", "--config", str(cfg.config_path),
+                                      "--date", DATE, "--include-seed", "/s"])
+    cli.main()
+    assert seen == {"seed_dir": Path("/s")}
+    monkeypatch.setattr(sys, "argv", ["newsradar", "tune", "--config", str(cfg.config_path),
+                                      "--rebuild", "--include-seed", "/s"])
+    with pytest.raises(SystemExit):
+        cli.main()
+
+
+# ---------- Task 12: deferred review findings ----------
+
+def test_unusable_second_opinion_drops_the_change_without_aborting(cfg, evidence, fakes):
+    fakes.candidate_fixes_today_mistake()
+    fakes.judge_proposes_ad_example()
+    fakes.second_ad_answers = {"k_ok_aaaaaaaa": None}
+    out = run_tune(cfg, DATE, log=lambda s: None)
+    assert out.ads_applied and all(not e["is_ad"] or e["id"].startswith("hustle") for e in store(cfg).ad_examples())
+    assert not any("k_ok_aaa" in e["id"] for e in store(cfg).ad_examples())
+    assert "no usable reply, counted as a disagreement" in out.report_path.read_text()
+
+
+def test_remove_rule_dropped_when_no_item_today_is_news(cfg, evidence, fakes):
+    fakes.mistakes = {}
+    fakes.unjudged_keys = {"k_ok_aaaaaaaa"}  # left: two items judged ads
+    fakes.rules = [ProposedRule("Output is_ad: true for a webinar invite.", "remove")]
+    out = run_tune(cfg, DATE, log=lambda s: None)
+    assert fakes.rule_checks == [] and store(cfg).ad_rules() == ""
+    assert "nothing to check it against" in out.report_path.read_text()
+
+
+def test_rule_saying_is_ad_true_is_remove_leaning_whatever_the_judge_said(cfg, evidence, fakes):
+    fakes.candidate_fixes_today_mistake()
+    fakes.second_opinion_rule = False
+    fakes.rules = [ProposedRule("Output IS_AD :  True for a webinar invite.", "keep")]
+    out = run_tune(cfg, DATE, log=lambda s: None)
+    assert [r for r, _ in fakes.rule_checks] == ["Output IS_AD :  True for a webinar invite."]
+    assert "webinar" not in store(cfg).ad_rules()
+    assert "treated as remove-leaning" in out.report_path.read_text()

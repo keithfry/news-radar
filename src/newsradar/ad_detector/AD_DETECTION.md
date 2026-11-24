@@ -4,10 +4,9 @@
 
 ```
 item received
-  → _is_advertisement()     heuristic (ad phrase in the title) — zero LLM cost
-  → classify_ad()           LLM gate (ad-detector model) — catches contextual ads
+  → classify_ad()           LLM gate (ad-detector model)
   → classify_ai()           relevance check (only for non-keyword items)
-  → summarize()             only runs if item passed both gates
+  → summarize()             only runs if item passed both checks
 ```
 
 Set `AD_GATE_ENABLED=0` in `.env` to disable the LLM gate (e.g. for a speed test).
@@ -19,7 +18,12 @@ model without a `SYSTEM` prompt (such as base `qwen3.5:9b`) gets the full
 instructions inline. Sending both used to double prompt time and overflow the
 model's 4096-token context on long items.
 
-arXiv items skip both checks. Each verdict is remembered for the run, so emails
+Every item except arXiv papers goes to the ad model. There is no title-phrase
+pre-check and no webinar check on the summary: across 54 daily logs they removed
+5 items in two months, 2 of them news, and nothing judged their decisions. Now
+the daily tuner judges every removal.
+
+arXiv items skip the ad gate. Each verdict is remembered for the run, so emails
 and linked articles are checked once, not once per topic.
 
 ## Ad Categories the Gate Catches
@@ -112,7 +116,7 @@ The daily tuner (above) handles most of this. To add examples by hand:
 
 3. **Add a matching non-ad example** from the same page to keep the dataset balanced.
 
-4. **Run the tests** to check the dataset and the heuristic:
+4. **Run the tests** to check the dataset:
    ```bash
    uv run pytest tests/test_ad_detector.py
    ```
@@ -141,7 +145,7 @@ The daily tuner (above) handles most of this. To add examples by hand:
    ```bash
    uv run newsradar --config /tmp/scratch-config.toml --dry-run --no-email --date YYYY-MM-DD
    ```
-   Then read the scan log for "ad gate" and "advertisement" lines.
+   Then read the scan log for "ad gate" lines.
 
 ### Tests
 
@@ -149,9 +153,8 @@ The daily tuner (above) handles most of this. To add examples by hand:
 uv run pytest tests/test_ad_detector.py
 ```
 
-The file checks that the dataset loads, that every example link is domain-only, that the
-title heuristic never flags a non-ad, and (when the model is installed) that the
-`ad-detector` model scores F1 of at least 0.8.
+The file checks that the dataset loads, that every example link is domain-only, and (when
+the model is installed) that the `ad-detector` model scores F1 of at least 0.8.
 
 ## Current Benchmark (May 2026)
 
@@ -159,7 +162,6 @@ Measured in May 2026 on 24 of the examples. The file now has 26, 16 ads and 10 n
 
 | Detector | Precision | Recall | F1 |
 |---|---|---|---|
-| heuristic | 0.00 | 0.00 | 0.00 |
 | llm (llama3.2:3b) | 0.67 | 0.13 | 0.22 |
 | custom (ad-detector) | 1.00 | 1.00 | 1.00 |
 

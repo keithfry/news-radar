@@ -29,13 +29,32 @@ def _no_models(monkeypatch):
     monkeypatch.setattr(cli, "classify_topic", lambda *a: False)
 
 
-def test_heuristic_ad_is_recorded(monkeypatch):
-    _no_models(monkeypatch)
+def _rest_of_pipeline_passes(monkeypatch):
+    monkeypatch.setattr(cli, "classify_topic", lambda *a: True)
+    monkeypatch.setattr(cli, "summarize", lambda *a: "A live webinar on agent evaluation, register at the site.")
+    monkeypatch.setattr(cli, "tag", lambda *a: [])
+    monkeypatch.setattr(cli, "_apply_exclusions", lambda title, summary, tags, topic, config: (tags, None))
+
+
+@pytest.mark.parametrize("title", [
+    "Freshworks alums raise $53M to take on Salesforce",  # "on sale" used to match inside "Salesforce"
+    "AI gadgets: shop now",
+])
+def test_every_title_reaches_the_ad_model(monkeypatch, title):
+    _rest_of_pipeline_passes(monkeypatch)
+    seen: list[str] = []
+    monkeypatch.setattr(cli, "classify_ad", lambda t, text, model: seen.append(t) or (False, ""))
     removed: list[dict] = []
-    item = {"title": "AI gadgets: shop now", "link": "https://x/1", "source": "X"}
-    assert cli._process_one(1, 1, item, "rss", _TOPIC, _config, removed) is None
-    assert removed == [{"title": "AI gadgets: shop now", "link": "https://x/1",
-                        "source": "X", "reason": "advertisement"}]
+    out = cli._process_one(1, 1, {"title": title, "source": "X"}, "rss", _TOPIC, _config, removed)
+    assert seen == [title] and out is not None and removed == []
+
+
+def test_webinar_summary_is_not_removed(monkeypatch):
+    _no_models(monkeypatch)
+    _rest_of_pipeline_passes(monkeypatch)
+    removed: list[dict] = []
+    out = cli._process_one(1, 1, {"title": "Agent evals webinar recap"}, "rss", _TOPIC, _config, removed)
+    assert out is not None and removed == []
 
 
 def _reasons(item: dict) -> list[str]:
@@ -59,11 +78,13 @@ def test_dollar_amounts_in_body_are_not_an_ad(monkeypatch):
     assert _reasons(item) == ["off-topic"]
 
 
-def test_arxiv_items_skip_the_heuristic_ad_check(monkeypatch):
+def test_arxiv_items_skip_the_ad_gate(monkeypatch):
     _no_models(monkeypatch)
+    seen: list[str] = []
+    monkeypatch.setattr(cli, "classify_ad", lambda t, text, model: seen.append(t) or (True, "x"))
     item = {"title": "Planning under a limited time budget", "source": "arXiv - cs.LG",
             "summary": "We bound regret by $2$, $5$ and $20$ rounds."}
-    assert _reasons(item) == ["off-topic"]
+    assert _reasons(item) == ["off-topic"] and seen == []
 
 
 def test_ad_gate_is_recorded(monkeypatch):
@@ -97,7 +118,7 @@ def _html(removed):
 def test_page_shows_removed_chip_and_section():
     html = _html([
         {"title": "Dup <story>", "link": "https://x/1", "source": "X", "reason": "duplicate"},
-        {"title": "Promo", "link": "", "source": "Y", "reason": "advertisement"},
+        {"title": "Promo", "link": "", "source": "Y", "reason": "ad detector"},
     ])
     assert "2 Removed" in html
     assert 'id="removed-items"' in html
