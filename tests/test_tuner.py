@@ -1190,15 +1190,15 @@ ALWAYS = {"today:k_ok_aaa", "today:k_fp_aaa", "today:k_ad_aaa"}  # a missed ad, 
 
 
 def test_gate_samples_passed_records_up_to_the_cap_and_keeps_mistakes_and_removals(cfg, evidence, fakes):
-    _add_records(evidence, _passed(12))
-    cfg.tuning.max_gate_today_cases = 6  # 3 always scored, so 3 of the 12 passed records
+    _add_records(evidence, _passed(30))
+    cfg.tuning.max_gate_today_cases = 25  # 3 always scored, so 22 of the 30 passed records
     fakes.judge_proposes_ad_example()  # k_ok, which the gate kept, is now a missed ad
     fakes.candidate_fixes_today_mistake()
     out = run_tune(cfg, DATE, log=lambda s: None)
     gated = {c for c in fakes.ad_case_ids if c.startswith("today:")}
     sampled = gated - ALWAYS
-    assert ALWAYS <= gated and len(sampled) == 3 and all(c.startswith("today:k_n") for c in sampled)
-    assert "9 of today's 12 passed records were sampled out" in out.report_path.read_text()
+    assert ALWAYS <= gated and len(sampled) == 22 and all(c.startswith("today:k_n") for c in sampled)
+    assert "8 of today's 30 passed records were sampled out" in out.report_path.read_text()
 
     fakes.ad_case_ids.clear()
     shutil.rmtree(store(cfg).root)  # forget the first run's examples, so the rerun gates again
@@ -1213,19 +1213,32 @@ def test_gate_sample_is_seeded_by_date():
     assert a != gating._sample_passed(keys, 5, "2026-11-24")
 
 
-def test_mistakes_and_removals_are_scored_even_past_the_cap(cfg, evidence, fakes):
+def test_mistakes_and_removals_are_scored_even_past_the_cap_with_all_of_a_few_passed(cfg, evidence, fakes):
     _add_records(evidence, _passed(5))
     cfg.tuning.max_gate_today_cases = 1  # fewer than the 3 that are always scored
     fakes.judge_proposes_ad_example()
     fakes.candidate_fixes_today_mistake()
     out = run_tune(cfg, DATE, log=lambda s: None)
-    assert {c for c in fakes.ad_case_ids if c.startswith("today:")} == ALWAYS
-    assert "5 of today's 5 passed records were sampled out" in out.report_path.read_text()
+    gated = {c for c in fakes.ad_case_ids if c.startswith("today:")}
+    assert ALWAYS <= gated and len(gated - ALWAYS) == 5  # min(20, 5) passed records still scored
+    assert "sampled out" not in out.report_path.read_text()
 
 
-def test_gate_scores_the_record_behind_a_balancing_example_past_the_cap(cfg, evidence, fakes):
+def test_a_full_cap_still_scores_twenty_passed_records(cfg, evidence, fakes):
+    _add_records(evidence, _passed(26))
+    cfg.tuning.max_gate_today_cases = 2  # the 3 always-scored records already fill it
+    fakes.judge_proposes_ad_example()
+    fakes.candidate_fixes_today_mistake()
+    out = run_tune(cfg, DATE, log=lambda s: None)
+    gated = {c for c in fakes.ad_case_ids if c.startswith("today:")}
+    assert ALWAYS <= gated and len(gated - ALWAYS) == 20
+    assert "6 of today's 26 passed records were sampled out" in out.report_path.read_text()
+
+
+def test_gate_scores_the_record_behind_a_balancing_example_past_the_cap(cfg, evidence, fakes, monkeypatch):
     _add_records(evidence, _passed(5))
     cfg.tuning.max_gate_today_cases = 0
+    monkeypatch.setattr(gating, "MIN_PASSED_SCORED", 0)  # so only the always-scored rule keeps it
     fakes.judge_proposes_ad_example()  # one ad example, so the day balances with a passed news item
     fakes.mistakes.pop("k_fp_aaaaaaaa")
     fakes.candidate_fixes_today_mistake()

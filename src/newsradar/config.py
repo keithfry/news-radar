@@ -88,9 +88,11 @@ class TuningConfig:
     learned_examples_per_class: int = 24
     max_rules_chars: int = 1500
     evidence_days: int = 30
-    # The most of today's records the ads gate scores. Mistakes and removals
-    # are always scored and fill the cap first; records that passed fill the rest.
-    max_gate_today_cases: int = 60
+    # The most of today's records the ads gate scores, as a safety cap. It
+    # equals max_items_per_run, so a normal day scores every record. Mistakes
+    # and removals are always scored and fill it first; records that passed
+    # fill the rest, never fewer than 20 of them.
+    max_gate_today_cases: int = 300
 
 
 @dataclass

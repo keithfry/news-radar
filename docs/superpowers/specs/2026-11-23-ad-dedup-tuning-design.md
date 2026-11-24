@@ -198,10 +198,12 @@ Steps:
    Mistakes the judge marked as not visible in the 1,000-character excerpt
    don't count toward "fixes at least one". They're listed in the report
    as needing a longer input.
-   Later change (2026-11-24): today's records that passed the gate are
-   sampled, so today's cases stay within `max_gate_today_cases`. Every
-   mistake and removal is still scored. `AD_DETECTION.md`, Gate cases, has
-   the rule.
+   Later change (2026-11-24): `max_gate_today_cases` (default 300, equal
+   to `max_items_per_run`) caps today's cases, so a normal day still
+   scores every judged item. Only a config that judges more items than
+   that samples the items that passed. Every mistake and removal is still
+   scored, and at least 20 passed items are. `AD_DETECTION.md`, Gate
+   cases, has the rule.
    Keith later relaxed the first rule for one kind of break (D5): one of
    today's items labeled an ad that the candidate now keeps. That break
    doesn't block when every broken item is of that kind and the candidate

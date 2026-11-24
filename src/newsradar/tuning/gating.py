@@ -32,6 +32,10 @@ from newsradar.tuning.store import TuningStore
 # Second opinions on gate blockers are asked only when this many cases or fewer broke.
 MAX_BLOCKERS_FOR_SECOND_OPINION = 2
 
+# However full max_gate_today_cases is, the ads gate scores at least this many
+# of today's passed records (or all of them, when there are fewer).
+MIN_PASSED_SCORED = 20
+
 
 def _sample_passed(keys: list[str], n: int, date: str) -> set[str]:
     """n of the keys, picked by a hash seeded with date, so every run on that
@@ -56,7 +60,8 @@ class _GateSteps:
         Every base, learned and seed example is a case. Of today's records,
         every mistake, removal, settled case and record behind a new example
         is a case. Records that passed fill what is left of
-        max_gate_today_cases, picked by _sample_passed."""
+        max_gate_today_cases, picked by _sample_passed, and never fewer than
+        MIN_PASSED_SCORED of them."""
         cases: list[Case] = []
         for prefix, examples in (("base", load_examples(BASE_EXAMPLES)), ("learned", self.store.ad_examples())):
             for e in examples:
@@ -75,12 +80,12 @@ class _GateSteps:
                   and by_key[v.key].verdict != "ad"}
         always = len(judgement.verdicts) - len(passed)
         cap = self.tuning.max_gate_today_cases
-        keep = _sample_passed(sorted(passed), cap - always, self.date)
+        keep = _sample_passed(sorted(passed), max(cap - always, min(MIN_PASSED_SCORED, len(passed))), self.date)
         if len(keep) < len(passed):
             self.rep.sample_line = (
                 f"Ads gate: {len(passed) - len(keep)} of today's {len(passed)} passed records were sampled "
                 f"out (max_gate_today_cases {cap}; the {always} mistakes, removals and records behind new "
-                "examples always count).")
+                f"examples always count, and at least {MIN_PASSED_SCORED} passed records are scored).")
         for v in judgement.verdicts:
             if v.key in passed and v.key not in keep:
                 continue

@@ -40,6 +40,7 @@ def test_data_dir_is_git_ignored():
 
 def test_tuning_gate_and_learned_defaults_and_overrides(tmp_path):
     default = load_config(_write_config(tmp_path, ""), env_file=tmp_path / "none.env")
-    assert default.tuning.learned_examples_per_class == 24 and default.tuning.max_gate_today_cases == 60
+    assert default.tuning.learned_examples_per_class == 24 and default.tuning.max_gate_today_cases == 300
+    assert default.tuning.max_gate_today_cases == default.tuning.max_items_per_run
     cfg = load_config(_write_config(tmp_path, "[tuning]\nmax_gate_today_cases = 7\n"), env_file=tmp_path / "none.env")
     assert cfg.tuning.max_gate_today_cases == 7

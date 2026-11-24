@@ -110,17 +110,21 @@ The ads gate scores the live and candidate models on these cases:
 - every seed example;
 - of today's records, every mistake, every removal (verdict "ad"), every record whose
   label a second opinion settled, and every record behind a new example;
-- records that passed the gate, up to `[tuning] max_gate_today_cases` (60) of today's
-  cases in all. The records above fill the cap first and are scored even past it.
-  When more passed records exist than the cap leaves room for, the gate picks them
-  by a SHA-256 hash of the date and record key, so every run on the same day picks
-  the same ones.
+- every record that passed the gate, up to `[tuning] max_gate_today_cases` (300) of
+  today's cases in all.
 
-The report's gate results say how many passed records were sampled out. Today's
-records are the part of the case set that grows with the day's volume, so they carry
-the cap. A run with 89 cases took 10 minutes, and 2026-11-24 had 141 records. A news
-record the candidate starts removing outside the sample still shows up the next day,
-because the judge reviews every removal first.
+The default cap of 300 equals `max_items_per_run`, so on a normal day the gate scores
+every judged record. A record left out of the gate is news the candidate could start
+removing unchecked, which is the failure the tuner must never cause. The cap is a
+safety limit for configs that judge more records than the gate can score in time. A
+run with 89 cases took 10 minutes, and 2026-11-24 had 141 records.
+
+When the cap does bind, the mistakes, removals, settled records and records behind
+new examples fill it first and are scored even past it. Records that passed fill
+what is left, and never fewer than 20 of them (or all of them, when fewer than 20
+passed), so the cap never leaves the passed records unchecked. The gate picks them by
+a SHA-256 hash of the date and record key, so every run on the same day picks the
+same ones. The report's gate results say how many passed records were sampled out.
 
 ### Learned examples in the Modelfile
 
