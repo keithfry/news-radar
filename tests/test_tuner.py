@@ -529,6 +529,16 @@ def test_rollback_of_an_ads_snapshot_without_modelfile_changes_nothing(cfg, fake
     assert fakes.installed == [] and (snap / "learned_ad_examples.json").exists()
 
 
+def test_rollback_of_an_ads_snapshot_with_a_blank_modelfile_changes_nothing(cfg, fakes):
+    s = store(cfg)
+    s.save_ad_examples([{"id": "before"}])
+    s.snapshot(DATE, "   \n", ["ads"])
+    s.save_ad_examples([{"id": "after"}])
+    with pytest.raises(FileNotFoundError, match="holds no Modelfile"):
+        rollback(cfg, DATE)
+    assert s.ad_examples() == [{"id": "after"}] and fakes.installed == []
+
+
 def _cli_rollback(cfg, monkeypatch):
     monkeypatch.setattr(sys, "argv", ["newsradar", "tune", "--config", str(cfg.config_path), "--rollback", DATE])
     with pytest.raises(SystemExit) as info:

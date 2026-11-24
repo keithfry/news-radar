@@ -228,3 +228,15 @@ def test_damaged_applied_json_raises_bad_snapshot_error(tmp_path, text):
     (snap / "applied.json").write_text(text)
     with pytest.raises(store_module.BadSnapshotError, match="applied.json"):
         s.snapshot_parts(snap)
+
+
+@pytest.mark.parametrize("text,expected", [("FROM m\n", True), ("", False), ("  \n\t\n", False)])
+def test_has_modelfile_needs_non_blank_content(tmp_path, text, expected):
+    s = TuningStore(tmp_path)
+    snap = s.snapshot("2026-11-23", text, ["ads"])
+    assert s.has_modelfile(snap) is expected
+
+
+def test_has_modelfile_is_false_without_the_file(tmp_path):
+    s = TuningStore(tmp_path)
+    assert s.has_modelfile(s.snapshot("2026-11-23", None, ["dedup"])) is False

@@ -164,7 +164,12 @@ class TuningStore:
         return [p for p in parts if p in SNAPSHOT_PARTS]
 
     def has_modelfile(self, snapshot_dir: Path) -> bool:
-        return (Path(snapshot_dir) / _MODELFILE_NAME).is_file()
+        """True when the snapshot holds a Modelfile with some non-blank text."""
+        path = Path(snapshot_dir) / _MODELFILE_NAME
+        try:
+            return path.is_file() and bool(path.read_text(encoding="utf-8").strip())
+        except (OSError, UnicodeDecodeError):
+            return False
 
     def restore(self, snapshot_dir: Path, parts: list[str] | None = None) -> str | None:
         """Put back the learned files of the snapshot's parts (or of parts when
