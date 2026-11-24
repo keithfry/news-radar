@@ -57,7 +57,7 @@ from .podcast_generator import generate_podcast
 from .podcast_rss import generate_podcast_rss
 from .topics import Topic
 from .tuning.evidence import EvidenceRecorder
-from .tuning.store import TuningStore
+from .tuning.store import DEDUP_CASES_FILE, TuningStore
 
 MAX_LINKS_PER_EMAIL = 5
 
@@ -91,6 +91,18 @@ _ad_verdicts_lock = threading.Lock()
 
 # Set by main() for a normal scan when [tuning] is enabled. None means no evidence is kept.
 _evidence: EvidenceRecorder | None = None
+
+
+def _learned_dedup_block(config: Config) -> str:
+    """The learned dedup examples for the prompt, or "" when the learned file
+    can't be read. A bad file must not stop the daily digest."""
+    store = TuningStore(config.tuning.data_dir)
+    try:
+        return store.dedup_examples_block()
+    except Exception as exc:
+        log(f"WARNING: ignoring the learned dedup examples in {store.root / DEDUP_CASES_FILE}: "
+            f"{type(exc).__name__}: {exc}")
+        return ""
 
 
 def _evidence_source_type(item: dict, source_type: str) -> str:
@@ -736,15 +748,15 @@ def main() -> None:
     if args.hours is None:
         args.hours = config.pipeline.lookback_hours
 
-    if config.tuning.enabled and not args.podcast_only and not args.transcript_only:
-        _evidence = EvidenceRecorder(config.tuning.data_dir, as_of.strftime("%Y-%m-%d"))
-        set_learned_dedup_examples(TuningStore(config.tuning.data_dir).dedup_examples_block())
-
     publish_hook = _resolve_publish_hook(args.publish_hook or config.publish_hook)
 
     log_dir = config.repo_root / "logs"
     _log_file = _open_log_file(log_dir, as_of)
     try:
+        if config.tuning.enabled and not args.podcast_only and not args.transcript_only:
+            _evidence = EvidenceRecorder(config.tuning.data_dir, as_of.strftime("%Y-%m-%d"))
+            set_learned_dedup_examples(_learned_dedup_block(config))
+
         as_of_utc = as_of.astimezone(timezone.utc)
 
         email_items: list[dict] = []

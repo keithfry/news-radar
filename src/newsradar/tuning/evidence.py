@@ -66,29 +66,38 @@ class EvidenceRecorder:
         self, *, topic: str, item: dict, title: str, text: str, source_type: str,
         verdict: str, reason: str, model: str,
     ) -> None:
-        text_sent = text[:TEXT_SENT_CHARS]
-        key = _sha1(title + "\n" + text_sent)
-        with self._lock:
-            if key in self._seen:
-                return
-            self._seen.add(key)
-            rec = AdRecord(
-                key=key, date=self.date, topic=topic, title=title,
-                link=item.get("link", ""), source=item.get("source", ""),
-                source_type=source_type, text_sent=text_sent,
-                text_full=text[:TEXT_FULL_CHARS], verdict=verdict,
-                reason=reason, model=model,
-            )
-            self._append(topic, {"kind": "ad", **asdict(rec)})
+        """Never raises: a recorder bug must not stop the scan."""
+        try:
+            text_sent = text[:TEXT_SENT_CHARS]
+            key = _sha1(title + "\n" + text_sent)
+            with self._lock:
+                if key in self._seen:
+                    return
+                self._seen.add(key)
+                rec = AdRecord(
+                    key=key, date=self.date, topic=topic, title=title,
+                    link=item.get("link", ""), source=item.get("source", ""),
+                    source_type=source_type, text_sent=text_sent,
+                    text_full=text[:TEXT_FULL_CHARS], verdict=verdict,
+                    reason=reason, model=model,
+                )
+                self._append(topic, {"kind": "ad", **asdict(rec)})
+        except Exception as exc:
+            log.warning("could not record ad evidence for %r: %s: %s", title[:60], type(exc).__name__, exc)
 
     def record_dedup(self, *, topic: str, titles: list[str], dropped: list[int]) -> None:
-        key = _sha1(topic + "\n" + "\n".join(titles))
-        with self._lock:
-            if key in self._seen:
-                return
-            self._seen.add(key)
-            rec = DedupRecord(key=key, date=self.date, topic=topic, titles=list(titles), dropped=list(dropped))
-            self._append(topic, {"kind": "dedup", **asdict(rec)})
+        """Never raises: a recorder bug must not stop the scan."""
+        try:
+            key = _sha1(topic + "\n" + "\n".join(titles))
+            with self._lock:
+                if key in self._seen:
+                    return
+                self._seen.add(key)
+                rec = DedupRecord(key=key, date=self.date, topic=topic, titles=list(titles),
+                                  dropped=list(dropped))
+                self._append(topic, {"kind": "dedup", **asdict(rec)})
+        except Exception as exc:
+            log.warning("could not record dedup evidence for topic %s: %s: %s", topic, type(exc).__name__, exc)
 
 
 def load_day(data_dir: Path, date: str) -> tuple[list[AdRecord], list[DedupRecord], int]:

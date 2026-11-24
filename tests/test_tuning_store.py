@@ -2,6 +2,12 @@
 
 from __future__ import annotations
 
+import json
+import os
+
+import pytest
+
+from newsradar.tuning import store as store_module
 from newsradar.tuning.store import TuningStore, domain_only
 
 
@@ -57,6 +63,8 @@ def test_dedup_block_formats_newest_twelve(tmp_path):
     assert block.startswith("LEARNED EXAMPLES (past mistakes to avoid):\n")
     assert "T15a" in block and "T4a" in block and "T3a" not in block
     assert "0. T15a" in block and "[[0, 1]]" in block
+    # The real batch that follows is headed "Articles:", so the examples use another label.
+    assert "Example articles:\n0. T15a" in block and "\nArticles:" not in block
 
 
 def test_dedup_block_for_unsaved_cases_matches_saved_block(tmp_path):
@@ -73,7 +81,7 @@ def test_dedup_block_empty_without_cases(tmp_path):
 
 
 def test_domain_only():
-    assert domain_only("https://thehustle.co/join?ref=6693394292") == "https://thehustle.co/"
+    assert domain_only("https://thehustle.co/join?ref=1234567890") == "https://thehustle.co/"
     assert domain_only("") == ""
     assert domain_only("not a url") == ""
 
@@ -147,3 +155,32 @@ def test_prune_never_deletes_todays_report(tmp_path):
     s = TuningStore(tmp_path)
     today = _report(s, "2026-11-23")
     assert s.prune("2026-11-23", 0) == [] and today.exists()
+
+
+def test_failed_write_leaves_the_old_file_whole_and_no_temp_file(tmp_path, monkeypatch):
+    s = TuningStore(tmp_path)
+    s.save_ad_examples([ex("old")])
+
+    def killed(src, dst):
+        raise OSError("killed mid-write")
+
+    monkeypatch.setattr(store_module.os, "replace", killed)
+    with pytest.raises(OSError):
+        s.save_ad_examples([ex("new")])
+    assert [e["title"] for e in s.ad_examples()] == ["old"]
+    assert sorted(p.name for p in s.root.iterdir()) == ["learned_ad_examples.json"]
+
+
+def test_write_goes_through_a_temp_file_in_the_same_folder(tmp_path, monkeypatch):
+    s = TuningStore(tmp_path)
+    seen = []
+    real = os.replace
+
+    def spy(src, dst):
+        seen.append((os.path.dirname(src), os.path.dirname(dst)))
+        real(src, dst)
+
+    monkeypatch.setattr(store_module.os, "replace", spy)
+    s.save_dedup_cases([{"titles": ["a", "b"], "expected_groups": []}])
+    assert seen == [(str(s.root), str(s.root))]
+    assert json.loads((s.root / "learned_dedup_cases.json").read_text())[0]["titles"] == ["a", "b"]

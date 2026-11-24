@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 
 import pytest
 
@@ -61,6 +62,19 @@ def test_write_failure_does_not_raise(tmp_path):
     EvidenceRecorder(tmp_path, DATE).record_dedup(topic="ai", titles=["A"], dropped=[])
 
 
+def test_recorder_error_of_any_kind_is_logged_not_raised(tmp_path, monkeypatch, caplog):
+    def broken(self, topic, obj):
+        raise ValueError("bad value")
+
+    monkeypatch.setattr(EvidenceRecorder, "_append", broken)
+    rec = EvidenceRecorder(tmp_path, DATE)
+    with caplog.at_level(logging.WARNING, logger="newsradar.tuning.evidence"):
+        rec.record_ad(topic="ai", item={}, title="T", text="x", source_type="feed", verdict="ad",
+                      reason="", model="m")
+        rec.record_dedup(topic="ai", titles=["A", "B"], dropped=[])
+    assert caplog.text.count("bad value") == 2
+
+
 @pytest.fixture
 def _clean_cache():
     cli._ad_verdicts.clear()
@@ -70,6 +84,10 @@ def _clean_cache():
 
 def _scan(monkeypatch, tmp_path, item, source_type="rss"):
     config = load_config(EXAMPLE_CONFIG)
+    # A kept item goes on to the topic check, summary and tags; none of them may reach Ollama.
+    monkeypatch.setattr(cli, "classify_topic", lambda *a, **kw: True)
+    monkeypatch.setattr(cli, "summarize", lambda *a, **kw: "summary")
+    monkeypatch.setattr(cli, "tag", lambda *a, **kw: [])
     monkeypatch.setattr(cli, "_evidence", EvidenceRecorder(tmp_path, DATE))
     removed: list[dict] = []
     cli._process_one(1, 1, item, source_type, config.topic("ai"), config, removed)

@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import shutil
+import tempfile
 from datetime import date as _date, timedelta
 from pathlib import Path
 from urllib.parse import urlparse
@@ -14,6 +16,7 @@ _MODELFILE_NAME = "Modelfile"
 _DEDUP_HEADING = "LEARNED EXAMPLES (past mistakes to avoid):"
 AD_EXAMPLES_FILE = "learned_ad_examples.json"
 AD_RULES_FILE = "learned_ad_rules.txt"
+DEDUP_CASES_FILE = "learned_dedup_cases.json"
 _DATED_NAME = re.compile(r"(\d{4}-\d{2}-\d{2})(?:-(\d+))?")
 
 
@@ -47,7 +50,7 @@ class TuningStore:
         self.root = Path(data_dir) / "tuning"
         self._ad_examples = self.root / AD_EXAMPLES_FILE
         self._ad_rules = self.root / AD_RULES_FILE
-        self._dedup_cases = self.root / "learned_dedup_cases.json"
+        self._dedup_cases = self.root / DEDUP_CASES_FILE
 
     def _read_json(self, path: Path) -> list[dict]:
         if not path.exists():
@@ -55,8 +58,17 @@ class TuningStore:
         return json.loads(path.read_text(encoding="utf-8"))
 
     def _write(self, path: Path, text: str) -> None:
+        """Write to a temp file in the same folder, then rename it over path, so
+        a process killed mid-write never leaves a truncated file."""
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(text, encoding="utf-8")
+        fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.", suffix=".tmp")
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                f.write(text)
+            os.replace(tmp, path)
+        except BaseException:
+            Path(tmp).unlink(missing_ok=True)
+            raise
 
     def _write_json(self, path: Path, data: list[dict]) -> None:
         self._write(path, json.dumps(data, indent=2, ensure_ascii=False) + "\n")
@@ -93,7 +105,7 @@ class TuningStore:
         for case in newest:
             titles = "\n".join(f"{i}. {t}" for i, t in enumerate(case["titles"]))
             groups = json.dumps(case["expected_groups"])
-            parts.append(f"Articles:\n{titles}\nExpected duplicate groups: {groups}")
+            parts.append(f"Example articles:\n{titles}\nExpected duplicate groups: {groups}")
         return "\n\n".join(parts) + "\n"
 
     def _snapshots(self) -> list[tuple[tuple[_date, int], Path]]:
