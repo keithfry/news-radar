@@ -89,8 +89,10 @@ so nothing sensitive from a URL is stored. Evidence, snapshots and reports older
 ### Kept ads
 
 The ads gate normally rejects a change that breaks any case the live model gets right.
-One kind of break may pass: one of today's items that the judge labeled an ad, which
-the live model removes and the candidate keeps. The change still passes only if every
+One kind of break may pass: one of today's items labeled an ad, which the live model
+removes and the candidate keeps. A today item's label is the judge's verdict, except
+when the second opinion disputed the judge's call on it. That case is settled, and its
+label is the gate's own verdict. The change still passes only if every
 broken case is of that kind, it fixes at least 5 cases per kept ad
 (`KEPT_AD_FIX_RATIO` in `tuning/tuner.py`), it has fewer errors in total, and it fixes
 a countable mistake from today. Fixed seed examples don't count toward that ratio,
