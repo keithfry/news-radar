@@ -95,3 +95,56 @@ def test_learned_note_is_capped_and_escaped_as_json():
     assert label == {"is_ad": False, "reason": note[:200]}
     live = build_live_modelfile(BASE, BASE_EXAMPLES, [dict(ex("t", is_ad=False), notes=note)], "", 12)
     assert live.count('"""') == BASE.count('"""')
+
+
+# ---------- the context guard ----------
+
+def _modelfile(system: str, num_ctx: int | None = 1000) -> str:
+    param = f"PARAMETER num_ctx {num_ctx}\n" if num_ctx is not None else ""
+    return f'FROM some-model\n{param}SYSTEM """\n{system}\n"""\n'
+
+
+def test_context_guard_passes_under_seventy_percent_of_num_ctx():
+    # 2,796 chars is about 699 tokens, under 700 of num_ctx 1000.
+    tokens = um.check_context_budget(_modelfile("x" * 2794))
+    assert 690 <= tokens <= 700
+
+
+def test_context_guard_raises_over_seventy_percent_of_num_ctx():
+    try:
+        um.check_context_budget(_modelfile("x" * 2900))
+    except um.ModelfileTooLargeError as exc:
+        msg = str(exc)
+        assert "num_ctx 1000" in msg and "70%" in msg and "learned_examples_per_class" in msg
+    else:
+        raise AssertionError("no error for a SYSTEM block over the budget")
+
+
+def test_context_guard_counts_the_training_examples_inside_system():
+    small = build_live_modelfile(BASE, BASE_EXAMPLES, [], "", 24)
+    learned = [ex(f"t{i}" * 40, i % 2 == 0, f"2026-11-{1 + i % 28:02d}", id=f"id{i}") for i in range(48)]
+    for e in learned:
+        e["summary"] = "s" * 200
+        e["notes"] = "n" * 200
+    big = build_live_modelfile(BASE, BASE_EXAMPLES, learned, "", 24)
+    assert um.check_context_budget(small) > 0
+    try:
+        um.check_context_budget(big)
+    except um.ModelfileTooLargeError:
+        pass
+    else:
+        raise AssertionError("48 long learned examples should not fit in 70% of num_ctx 8192")
+
+
+def test_context_guard_needs_a_num_ctx_and_a_system_block():
+    for text in (_modelfile("x", num_ctx=None), "FROM m\nPARAMETER num_ctx 8192\n"):
+        try:
+            um.check_context_budget(text)
+        except um.ModelfileTooLargeError:
+            pass
+        else:
+            raise AssertionError(f"no error for {text!r}")
+
+
+def test_the_committed_base_fits_the_budget():
+    assert um.check_context_budget(build_live_modelfile(BASE, BASE_EXAMPLES, [], "", 24)) < 0.7 * 8192

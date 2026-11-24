@@ -9,7 +9,9 @@ Up to MAX_EXAMPLES are selected (balanced between ads and not-ads).
 """
 
 import json
+import math
 import random
+import re
 from pathlib import Path
 
 _PACKAGE_DIR = Path(__file__).parent
@@ -18,6 +20,41 @@ DEFAULT_DATA_PATH = _REPO_ROOT / "tests" / "test_data" / "labeled_examples.json"
 DEFAULT_MODELFILE_PATH = _PACKAGE_DIR / "AdDetectorModelfile"
 MAX_EXAMPLES = 25  # per class
 NOTES_CHARS = 200  # the longest reason an example's Output line carries
+
+# A rough count for the context guard. Measured on the live model on
+# 2026-11-24: 38 examples used 4454 prompt tokens, and this estimate comes out
+# about 5% under what Ollama reports.
+CHARS_PER_TOKEN = 4
+CONTEXT_SHARE = 0.7  # the share of num_ctx the SYSTEM block may fill; the rest is for the item and reply
+
+_NUM_CTX = re.compile(r"^PARAMETER\s+num_ctx\s+(\d+)\s*$", re.MULTILINE)
+_SYSTEM_BLOCK = re.compile(r'^SYSTEM """\n?(.*?)^"""', re.DOTALL | re.MULTILINE)
+
+
+class ModelfileTooLargeError(ValueError):
+    """The built Modelfile's SYSTEM block would leave too little of num_ctx for the item."""
+
+
+def check_context_budget(text: str, share: float = CONTEXT_SHARE) -> int:
+    """Estimate the SYSTEM block's tokens (rules plus training examples) at
+    CHARS_PER_TOKEN and return the estimate. Raises ModelfileTooLargeError when
+    it is over share of the Modelfile's num_ctx, or when the Modelfile has no
+    num_ctx or no SYSTEM block to measure."""
+    ctx = _NUM_CTX.search(text)
+    system = _SYSTEM_BLOCK.search(text)
+    if ctx is None or system is None:
+        raise ModelfileTooLargeError("the Modelfile needs a PARAMETER num_ctx line and a SYSTEM block "
+                                     "for the context check")
+    num_ctx = int(ctx.group(1))
+    tokens = math.ceil(len(system.group(1)) / CHARS_PER_TOKEN)
+    limit = share * num_ctx
+    if tokens > limit:
+        raise ModelfileTooLargeError(
+            f"the SYSTEM block is about {tokens} tokens, over {share:.0%} of num_ctx {num_ctx} "
+            f"({int(limit)} tokens), so a long item would not fit. Lower [tuning] "
+            "learned_examples_per_class, shorten the learned rules, or raise num_ctx in AdDetectorModelfile")
+    return tokens
+
 
 TRAINING_SECTION_START = "TRAINING EXAMPLES (memorize these):\n"
 _SECTION_END = '"""\n'

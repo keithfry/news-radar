@@ -100,6 +100,48 @@ because the seed is in the candidate's own training block and fixing it proves
 little. News the candidate now removes, and any break in a base, learned or seed
 example, always blocks. The report lists each kept ad by id and title.
 
+### Gate cases
+
+The ads gate scores the live and candidate models on these cases:
+
+- every base example in `tests/test_data/labeled_examples.json`;
+- every learned example, including older ones the Modelfile no longer holds. They are
+  the regression set for news the gate once removed by mistake;
+- every seed example;
+- of today's records, every mistake, every removal (verdict "ad"), every record whose
+  label a second opinion settled, and every record behind a new example;
+- records that passed the gate, up to `[tuning] max_gate_today_cases` (60) of today's
+  cases in all. The records above fill the cap first and are scored even past it.
+  When more passed records exist than the cap leaves room for, the gate picks them
+  by a SHA-256 hash of the date and record key, so every run on the same day picks
+  the same ones.
+
+The report's gate results say how many passed records were sampled out. Today's
+records are the part of the case set that grows with the day's volume, so they carry
+the cap. A run with 89 cases took 10 minutes, and 2026-11-24 had 141 records. A news
+record the candidate starts removing outside the sample still shows up the next day,
+because the judge reviews every removal first.
+
+### Learned examples in the Modelfile
+
+The Modelfile holds every base example plus the newest
+`[tuning] learned_examples_per_class` (24) learned examples of each label, by `added`
+date. The default was 12. On 2026-11-24 all 12 learned not-ad examples were from the
+day before, so a run's 4 new examples pushed 4 of them out of the candidate, the
+candidate then called one of those news items an ad, and the gate rightly blocked the
+change. At 12, each new day pushes out examples the model still needs.
+
+Measured with Ollama on 2026-11-24, 38 examples in the Modelfile used 4454 prompt
+tokens of `num_ctx` 8192, about 95 tokens per example. The scan sends the gate the
+title and the first 1,000 characters of the item text, about 270 tokens. Before
+installing a build, the tuner estimates the SYSTEM block, rules and examples included,
+at 4 characters per token. If that is over 70% of the Modelfile's `num_ctx` (5734
+tokens at 8192), it raises `ModelfileTooLargeError` and the run applies nothing. The
+estimate comes out about 5% under Ollama's count: the base build alone estimates at
+about 3140 tokens, so roughly 26 learned examples fit under the limit at 95 tokens
+each. The full 24 of each label (48) would not fit at `num_ctx` 8192. Raise `num_ctx`
+in `AdDetectorModelfile` before the learned set gets there.
+
 ### The report
 
 `data/tuning/reports/DATE.md` lists the evidence counted, each gate mistake with the

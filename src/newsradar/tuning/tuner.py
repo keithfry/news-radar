@@ -23,6 +23,7 @@ or seed example, always block.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import shutil
@@ -37,8 +38,11 @@ from newsradar.ad_detector.update_modelfile import (
     DEFAULT_MODELFILE_PATH,
     LEARNED_RULES_END,
     LEARNED_RULES_START,
+    CONTEXT_SHARE,
     TRAINING_SECTION_START,
+    ModelfileTooLargeError,
     build_live_modelfile,
+    check_context_budget,
     load_examples,
 )
 from newsradar.claude_cli import ClaudeCallError
@@ -107,7 +111,7 @@ class PreflightError(RuntimeError):
 
 # A failure of any of these means the run can't trust its results and applies nothing.
 _RUN_ERRORS = (JudgeError, ClaudeCallError, GateError, SeedError, SnapshotError,
-               subprocess.CalledProcessError, OSError)
+               ModelfileTooLargeError, subprocess.CalledProcessError, OSError)
 
 
 @dataclass
@@ -156,13 +160,25 @@ def remove_ollama_model(name: str) -> None:
 
 
 def _build_text(config: Config, examples: list[dict], rules: str) -> str:
-    return build_live_modelfile(
+    """Build a Modelfile from base plus the given learned data. Raises
+    ModelfileTooLargeError, before anything is installed, when its SYSTEM
+    block would fill more than CONTEXT_SHARE of num_ctx."""
+    text = build_live_modelfile(
         BASE_MODELFILE.read_text(encoding="utf-8"),
         load_examples(BASE_EXAMPLES),
         examples,
         rules,
         config.tuning.learned_examples_per_class,
     )
+    check_context_budget(text, CONTEXT_SHARE)
+    return text
+
+
+def _sample_passed(keys: list[str], n: int, date: str) -> set[str]:
+    """n of the keys, picked by a hash seeded with date, so every run on that
+    date picks the same ones whatever order the keys come in."""
+    order = sorted(keys, key=lambda k: hashlib.sha256(f"{date}:{k}".encode("utf-8")).hexdigest())
+    return set(order[:max(n, 0)])
 
 
 def _build_dir(config: Config) -> Path:
@@ -320,6 +336,7 @@ class _Report:
     rule_lines: list[str] = field(default_factory=list)
     dedup_lines: list[str] = field(default_factory=list)
     ad_gate: GateResult | None = None
+    sample_line: str = ""  # how many of today's passed records the ads gate left out
     dedup_gate: GateResult | None = None
     case_titles: dict[str, str] = field(default_factory=dict)
     apply_lines: list[str] = field(default_factory=list)
@@ -418,6 +435,8 @@ class _Report:
 
         out += ["## Gate results", ""]
         out += self._gate_lines("Ads", self.ad_gate, self.ads_status)
+        if self.ad_gate is not None and self.sample_line:
+            out.append(self.sample_line)
         if self.ad_gate is not None and self.live_untuned:
             out.append("The live model was not built by the tuner (no snapshot exists yet). The candidate "
                        "may also differ from it in num_ctx, the example order and the learned-rule markers, "
@@ -744,10 +763,15 @@ class _Tuner:
         self.candidate_attempted = True
         _install(self.config, text, self.candidate)
 
-    def _ad_cases(self, records: list[AdRecord], judgement: AdJudgement,
-                  mistakes: list[_Mistake]) -> tuple[list[Case], dict[str, AdRecord], set[str]]:
+    def _ad_cases(self, records: list[AdRecord], judgement: AdJudgement, mistakes: list[_Mistake],
+                  plan: _AdPlan) -> tuple[list[Case], dict[str, AdRecord], set[str]]:
         """Gate cases, today's case ids mapped to their records, and the ids of
-        today cases whose label the planning second opinion already disputed."""
+        today cases whose label the planning second opinion already disputed.
+
+        Every base, learned and seed example is a case. Of today's records,
+        every mistake, removal, settled case and record behind a new example
+        is a case. Records that passed fill what is left of
+        max_gate_today_cases, picked by _sample_passed."""
         cases: list[Case] = []
         for prefix, examples in (("base", load_examples(BASE_EXAMPLES)), ("learned", self.store.ad_examples())):
             for e in examples:
@@ -757,10 +781,24 @@ class _Tuner:
             cases.append(Case(id=f"seed:{e['id']}", title=e["title"], text=e["summary"],
                               expected=bool(e["is_ad"]), today_mistake=False, countable=True))
         disputed = {m.record.key for m in mistakes if m.second is False}
+        example_keys = set(plan.example_keys.values())
         by_key = {r.key: r for r in records}
         today: dict[str, AdRecord] = {}
         settled: set[str] = set()
+        passed = {v.key for v in judgement.verdicts
+                  if v.correct and v.key not in disputed and v.key not in example_keys
+                  and by_key[v.key].verdict != "ad"}
+        always = len(judgement.verdicts) - len(passed)
+        cap = self.tuning.max_gate_today_cases
+        keep = _sample_passed(sorted(passed), cap - always, self.date)
+        if len(keep) < len(passed):
+            self.rep.sample_line = (
+                f"Ads gate: {len(passed) - len(keep)} of today's {len(passed)} passed records were sampled "
+                f"out (max_gate_today_cases {cap}; the {always} mistakes, removals and records behind new "
+                "examples always count).")
         for v in judgement.verdicts:
+            if v.key in passed and v.key not in keep:
+                continue
             record = by_key[v.key]
             case_id = f"today:{record.key[:8]}"
             if record.key in disputed:
@@ -794,7 +832,7 @@ class _Tuner:
                   plan: _AdPlan) -> GateResult:
         self.rep.live_untuned = not self.store.has_snapshot()
         self._install_candidate(plan)
-        cases, today, settled = self._ad_cases(records, judgement, mistakes)
+        cases, today, settled = self._ad_cases(records, judgement, mistakes, plan)
         current_ok, candidate_ok = self._score_ads(cases)
         result = decide(cases, current_ok, candidate_ok, allow_keep_side_ratio=KEPT_AD_FIX_RATIO)
         expected = {c.id: c.expected for c in cases}

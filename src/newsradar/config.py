@@ -85,9 +85,12 @@ class TuningConfig:
     judge_effort: str = "medium"
     max_items_per_run: int = 300
     max_new_examples_per_day: int = 8
-    learned_examples_per_class: int = 12
+    learned_examples_per_class: int = 24
     max_rules_chars: int = 1500
     evidence_days: int = 30
+    # The most of today's records the ads gate scores. Mistakes and removals
+    # are always scored and fill the cap first; records that passed fill the rest.
+    max_gate_today_cases: int = 60
 
 
 @dataclass
@@ -295,6 +298,7 @@ def load_config(config_path: str | Path, env_file: str | Path | None = None) -> 
         ),
         max_rules_chars=int(tuning_raw.get("max_rules_chars", tuning_defaults.max_rules_chars)),
         evidence_days=int(tuning_raw.get("evidence_days", tuning_defaults.evidence_days)),
+        max_gate_today_cases=int(tuning_raw.get("max_gate_today_cases", tuning_defaults.max_gate_today_cases)),
     )
 
     return Config(

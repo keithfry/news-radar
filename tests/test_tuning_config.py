@@ -36,3 +36,10 @@ def test_tuning_table_overrides_and_resolves_relative_data_dir(tmp_path):
 def test_data_dir_is_git_ignored():
     out = subprocess.run(["git", "check-ignore", "data/x"], cwd=REPO, capture_output=True, text=True)
     assert out.returncode == 0
+
+
+def test_tuning_gate_and_learned_defaults_and_overrides(tmp_path):
+    default = load_config(_write_config(tmp_path, ""), env_file=tmp_path / "none.env")
+    assert default.tuning.learned_examples_per_class == 24 and default.tuning.max_gate_today_cases == 60
+    cfg = load_config(_write_config(tmp_path, "[tuning]\nmax_gate_today_cases = 7\n"), env_file=tmp_path / "none.env")
+    assert cfg.tuning.max_gate_today_cases == 7

@@ -4,6 +4,7 @@ call is replaced with a fake in newsradar.tuning.tuner; nothing real runs."""
 from __future__ import annotations
 
 import json
+import shutil
 import subprocess
 import sys
 from dataclasses import asdict
@@ -1155,3 +1156,104 @@ def test_second_gate_pass_rejects_a_kept_ad_under_five_to_one(cfg, evidence, fak
     fakes.second_pass_break_ids = {"today:k_ad2aaa"}
     out = run_tune(cfg, DATE, log=lambda s: None)
     assert not out.ads_applied and fakes.installed.count(CANDIDATE) == 2 and LIVE not in fakes.installed
+
+
+# ---------- the gate's case set stays bounded ----------
+
+def _learned(i, is_ad, added):
+    return {"id": f"l{i}", "title": f"learned {i}", "summary": f"summary {i}", "source": "s",
+            "link": "https://x.com/", "is_ad": is_ad, "ad_type": "sponsor_content" if is_ad else "not_ad",
+            "notes": "", "added": added}
+
+
+def test_gate_scores_every_learned_example_even_ones_trimmed_from_the_modelfile(cfg, evidence, fakes):
+    cfg.tuning.learned_examples_per_class = 2
+    store(cfg).save_ad_examples([_learned(i, i % 2 == 0, f"2026-11-{10 + i:02d}") for i in range(8)])
+    fakes.candidate_fixes_today_mistake()
+    run_tune(cfg, DATE, log=lambda s: None)
+    gated = {c for c in fakes.ad_case_ids if c.startswith("learned:")}
+    assert gated == {f"learned:l{i}" for i in range(8)}
+
+
+def _passed(n):
+    return [ad_rec(f"k_n{i:02d}aaaaaa", "not_ad", f"News story {i}", source="Wire") for i in range(n)]
+
+
+def _add_records(evidence, records):
+    with (evidence / "AI.jsonl").open("a") as f:
+        for r in records:
+            f.write(json.dumps({"kind": "ad", **asdict(r)}) + "\n")
+
+
+ALWAYS = {"today:k_ok_aaa", "today:k_fp_aaa", "today:k_ad_aaa"}  # a missed ad, a false removal, a removal
+
+
+def test_gate_samples_passed_records_up_to_the_cap_and_keeps_mistakes_and_removals(cfg, evidence, fakes):
+    _add_records(evidence, _passed(12))
+    cfg.tuning.max_gate_today_cases = 6  # 3 always scored, so 3 of the 12 passed records
+    fakes.judge_proposes_ad_example()  # k_ok, which the gate kept, is now a missed ad
+    fakes.candidate_fixes_today_mistake()
+    out = run_tune(cfg, DATE, log=lambda s: None)
+    gated = {c for c in fakes.ad_case_ids if c.startswith("today:")}
+    sampled = gated - ALWAYS
+    assert ALWAYS <= gated and len(sampled) == 3 and all(c.startswith("today:k_n") for c in sampled)
+    assert "9 of today's 12 passed records were sampled out" in out.report_path.read_text()
+
+    fakes.ad_case_ids.clear()
+    shutil.rmtree(store(cfg).root)  # forget the first run's examples, so the rerun gates again
+    run_tune(cfg, DATE, log=lambda s: None)
+    assert {c for c in fakes.ad_case_ids if c.startswith("today:k_n")} == sampled  # same sample every run
+
+
+def test_gate_sample_is_seeded_by_date():
+    keys = [f"k_n{i:02d}aaaaaa" for i in range(40)]
+    a = tuner._sample_passed(keys, 5, "2026-11-23")
+    assert a == tuner._sample_passed(list(reversed(keys)), 5, "2026-11-23") and len(a) == 5
+    assert a != tuner._sample_passed(keys, 5, "2026-11-24")
+
+
+def test_mistakes_and_removals_are_scored_even_past_the_cap(cfg, evidence, fakes):
+    _add_records(evidence, _passed(5))
+    cfg.tuning.max_gate_today_cases = 1  # fewer than the 3 that are always scored
+    fakes.judge_proposes_ad_example()
+    fakes.candidate_fixes_today_mistake()
+    out = run_tune(cfg, DATE, log=lambda s: None)
+    assert {c for c in fakes.ad_case_ids if c.startswith("today:")} == ALWAYS
+    assert "5 of today's 5 passed records were sampled out" in out.report_path.read_text()
+
+
+def test_gate_scores_the_record_behind_a_balancing_example_past_the_cap(cfg, evidence, fakes):
+    _add_records(evidence, _passed(5))
+    cfg.tuning.max_gate_today_cases = 0
+    fakes.judge_proposes_ad_example()  # one ad example, so the day balances with a passed news item
+    fakes.mistakes.pop("k_fp_aaaaaaaa")
+    fakes.candidate_fixes_today_mistake()
+    out = run_tune(cfg, DATE, log=lambda s: None)
+    balancing = [line for line in out.report_path.read_text().splitlines() if "Balancing example" in line]
+    assert len(balancing) == 1 and '"News story 0" (not ad' in balancing[0]
+    assert "today:k_n00aaa" in fakes.ad_case_ids
+
+
+def test_gate_under_the_cap_scores_every_today_record(cfg, evidence, fakes):
+    _add_records(evidence, _passed(4))
+    fakes.candidate_fixes_today_mistake()
+    out = run_tune(cfg, DATE, log=lambda s: None)
+    assert len({c for c in fakes.ad_case_ids if c.startswith("today:")}) == 7
+    assert "sampled out" not in out.report_path.read_text()
+
+
+def test_candidate_over_the_context_budget_applies_nothing(cfg, evidence, fakes, monkeypatch):
+    monkeypatch.setattr(tuner, "CONTEXT_SHARE", 0.01)
+    fakes.candidate_fixes_today_mistake()
+    fakes.dedup_cases = [WRONG_MERGE]
+    out = run_tune(cfg, DATE, log=lambda s: None)
+    text = out.report_path.read_text()
+    assert not out.ads_applied and not out.dedup_applied and fakes.installed == []
+    assert "ModelfileTooLargeError" in text and "applied nothing" in text.lower()
+
+
+def test_rebuild_over_the_context_budget_installs_nothing(cfg, fakes, monkeypatch):
+    monkeypatch.setattr(tuner, "CONTEXT_SHARE", 0.01)
+    with pytest.raises(tuner.ModelfileTooLargeError):
+        rebuild_live_model(cfg)
+    assert fakes.installed == []
