@@ -582,6 +582,9 @@ def run_tune(config: Config, date: str, log: Callable[[str], None] | None = None
         tuner.run()
     except PreflightError as exc:
         report.error = f"Preflight failed, so the run made no judge calls and applied nothing: {exc}"
+    except ModelfileTooLargeError as exc:
+        report.error = (f"The candidate Modelfile is too large for num_ctx, so the run applied nothing: "
+                        f"{type(exc).__name__}: {exc}")
     except _RUN_ERRORS as exc:
         if isinstance(exc, JudgeError):
             report.cost += exc.cost_usd  # calls that ran before the failure still cost

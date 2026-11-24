@@ -1250,7 +1250,9 @@ def test_candidate_over_the_context_budget_applies_nothing(cfg, evidence, fakes,
     out = run_tune(cfg, DATE, log=lambda s: None)
     text = out.report_path.read_text()
     assert not out.ads_applied and not out.dedup_applied and fakes.installed == []
-    assert "ModelfileTooLargeError" in text and "applied nothing" in text.lower()
+    assert ("The candidate Modelfile is too large for num_ctx, so the run applied nothing: "
+            "ModelfileTooLargeError:") in text and "A call failed" not in text
+    assert "too large for num_ctx" in out.summary
 
 
 def test_rebuild_over_the_context_budget_installs_nothing(cfg, fakes, monkeypatch):
