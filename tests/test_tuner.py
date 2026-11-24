@@ -1331,3 +1331,29 @@ def test_cli_rollback_without_ollama_exits_one_with_one_line(cfg, fakes, monkeyp
     assert _cli_rollback(cfg, monkeypatch) == 1
     err = capsys.readouterr().err
     assert "Traceback" not in err and len(err.strip().splitlines()) == 1 and "ollama" in err
+
+
+def _cli_rebuild(cfg, monkeypatch):
+    monkeypatch.setattr(sys, "argv", ["newsradar", "tune", "--config", str(cfg.config_path), "--rebuild"])
+    with pytest.raises(SystemExit) as info:
+        cli.main()
+    return info.value.code
+
+
+@pytest.mark.parametrize("failure", ["too_large", "no_ollama", "create_fails"])
+def test_cli_rebuild_failure_prints_one_line_and_exits_one(cfg, fakes, monkeypatch, capsys, failure):
+    if failure == "too_large":
+        monkeypatch.setattr(models, "CONTEXT_SHARE", 0.01)
+        expected = "ModelfileTooLargeError: the SYSTEM block is about"
+    elif failure == "no_ollama":
+        def missing(modelfile_path, model_name):
+            raise tuner.OllamaNotFoundError("can't find the ollama command")
+        monkeypatch.setattr(models, "install_ad_detector_model", missing)
+        expected = "can't find the ollama command"
+    else:
+        fakes.fail_install_of = LIVE
+        expected = "exit status 1"
+    assert _cli_rebuild(cfg, monkeypatch) == 1
+    err = capsys.readouterr().err
+    assert "Traceback" not in err and len(err.strip().splitlines()) == 1
+    assert err.startswith("rebuild failed:") and expected in err

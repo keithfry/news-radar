@@ -671,7 +671,10 @@ def _run_tune_command(args: argparse.Namespace, parser: argparse.ArgumentParser)
         parser.error("--include-seed goes with a daily run, not --rebuild or --rollback")
     config = load_config(args.config)
     if args.rebuild:
-        tuner.rebuild_live_model(config)
+        try:
+            tuner.rebuild_live_model(config)
+        except (tuner.ModelfileTooLargeError, tuner.OllamaNotFoundError, subprocess.CalledProcessError) as e:
+            parser.exit(1, f"rebuild failed: {type(e).__name__}: {_one_line(e)}\n")
         print(f"Rebuilt {tuner.live_model_name(config)} from base plus learned data")
         return
     if args.rollback:
