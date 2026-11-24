@@ -63,7 +63,8 @@ class AdJudgement:
     verdicts: list[AdVerdict]
     proposed_rules: list[ProposedRule]
     cost_usd: float
-    skipped: int = 0  # records left unjudged: no verdict, or their id was repeated
+    skipped: int = 0  # records left unjudged, including the shifted ones
+    shifted: int = 0  # skipped because the reply's correct contradicted the gate's record
 
 
 @dataclass
@@ -220,9 +221,9 @@ def _make_example(record: AdRecord, verdict: AdVerdict, raw: dict) -> dict:
 
 
 def _parse_ad_batch(batch: list[AdRecord], reply: dict,
-                    what: str) -> tuple[list[AdVerdict], list[ProposedRule], int]:
+                    what: str) -> tuple[list[AdVerdict], list[ProposedRule], int, int]:
     """Map a reply's r0..rN ids back to the batch. Returns (verdicts in batch
-    order, rules, records skipped). A record is skipped when it has no verdict,
+    order, rules, records skipped, of those skipped for a shifted verdict). A record is skipped when it has no verdict,
     its id is repeated, its is_ad and ad_type disagree, or the reply's
     `correct` contradicts the one derived from the label and the gate's
     verdict. That last check catches verdicts shifted onto a neighbouring
@@ -239,6 +240,7 @@ def _parse_ad_batch(batch: list[AdRecord], reply: dict,
             grouped.setdefault(rid, []).append(raw)
 
     found: dict[str, AdVerdict] = {}
+    shifted = 0
     for rid, raws in grouped.items():
         if len(raws) > 1:
             continue
@@ -247,7 +249,8 @@ def _parse_ad_batch(batch: list[AdRecord], reply: dict,
             continue
         correct = raw["is_ad"] == (record.verdict == "ad")
         if isinstance(raw.get("correct"), bool) and raw["correct"] != correct:
-            continue  # the verdict likely belongs to another record
+            shifted += 1  # the verdict likely belongs to another record
+            continue
         v = AdVerdict(key=record.key, correct=correct, is_ad=raw["is_ad"], ad_type=raw["ad_type"],
                       reason=str(raw.get("reason") or ""),
                       visible_in_excerpt=bool(raw.get("visible_in_excerpt")), example=None)
@@ -265,13 +268,13 @@ def _parse_ad_batch(batch: list[AdRecord], reply: dict,
         if not isinstance(raw, dict) or raw.get("leaning") not in LEANINGS or not str(raw.get("text") or "").strip():
             raise JudgeError(f"{what}: bad proposed rule {raw!r}")
         rules.append(ProposedRule(text=str(raw["text"]).strip(), leaning=raw["leaning"]))
-    return [found[rid] for rid in by_id if rid in found], rules, skipped
+    return [found[rid] for rid in by_id if rid in found], rules, skipped, shifted
 
 
 def judge_ads(records: list[AdRecord], tuning: TuningConfig, batch_size: int = 20) -> AdJudgement:
     verdicts: list[AdVerdict] = []
     rules: list[ProposedRule] = []
-    skipped = 0
+    skipped = shifted = 0
     starts = range(0, len(records), batch_size)
     with _metered() as meter:
         for n, start in enumerate(starts, 1):
@@ -282,11 +285,13 @@ def judge_ads(records: list[AdRecord], tuning: TuningConfig, batch_size: int = 2
             prompt = (f"Review these {len(batch)} ad-gate decisions. Return exactly one verdict per record, "
                       f"using its id.\n\nRecords:\n{payload}\n")
             reply = _call(prompt, "judge_ads.md", AD_SCHEMA, tuning, what, meter)
-            batch_verdicts, batch_rules, batch_skipped = _parse_ad_batch(batch, reply, what)
+            batch_verdicts, batch_rules, batch_skipped, batch_shifted = _parse_ad_batch(batch, reply, what)
             verdicts += batch_verdicts
             rules += batch_rules
             skipped += batch_skipped
-    return AdJudgement(verdicts=verdicts, proposed_rules=rules, cost_usd=meter.cost, skipped=skipped)
+            shifted += batch_shifted
+    return AdJudgement(verdicts=verdicts, proposed_rules=rules, cost_usd=meter.cost, skipped=skipped,
+                       shifted=shifted)
 
 
 def second_opinion_ad(record: AdRecord, tuning: TuningConfig) -> tuple[bool | None, float]:
@@ -382,18 +387,26 @@ def judge_dedup(records: list[DedupRecord], tuning: TuningConfig) -> tuple[list[
     return cases, meter.cost, skipped
 
 
-def second_opinion_dedup(case: DedupCase, tuning: TuningConfig) -> tuple[bool | None, float]:
-    """Returns (agrees, cost_usd): agrees when the call finds exactly the case's
-    groups. agrees is None when the reply's groups are malformed (an index out
-    of range or repeated): the caller treats that as a disagreement. A failed
-    call still raises JudgeError."""
+def second_opinion_dedup_groups(case: DedupCase, tuning: TuningConfig) -> tuple[list[list[int]] | None, float]:
+    """Returns (groups, cost_usd): the duplicate groups a blind call finds among
+    the case's titles. groups is None when the reply's groups are malformed (an
+    index out of range or repeated). A failed call still raises JudgeError."""
     what = f"second opinion on dedup case {case.titles[:1]!r}"
     payload = json.dumps([{"id": i, "title": t} for i, t in enumerate(case.titles)], indent=2, ensure_ascii=False)
     prompt = f"Group the duplicates among these {len(case.titles)} titles.\n\nTitles:\n{payload}\n"
     with _metered() as meter:
         reply = _call(prompt, "second_opinion.md", SECOND_DEDUP_SCHEMA, tuning, what, meter)
     try:
-        groups = _check_groups(reply.get("groups"), len(case.titles), what)
+        return _check_groups(reply.get("groups"), len(case.titles), what), meter.cost
     except JudgeError:
         return None, meter.cost
-    return {frozenset(g) for g in groups} == {frozenset(g) for g in case.expected_groups}, meter.cost
+
+
+def second_opinion_dedup(case: DedupCase, tuning: TuningConfig) -> tuple[bool | None, float]:
+    """Returns (agrees, cost_usd): agrees when the call finds exactly the case's
+    groups. agrees is None when the reply's groups are malformed: the caller
+    treats that as a disagreement. A failed call still raises JudgeError."""
+    groups, cost = second_opinion_dedup_groups(case, tuning)
+    if groups is None:
+        return None, cost
+    return {frozenset(g) for g in groups} == {frozenset(g) for g in case.expected_groups}, cost

@@ -60,6 +60,7 @@ from newsradar.tuning.judge import (
     judge_dedup,
     second_opinion_ad,
     second_opinion_dedup,
+    second_opinion_dedup_groups,
     second_opinion_rule,
 )
 from newsradar.tuning.store import AD_EXAMPLES_FILE, AD_RULES_FILE, TuningStore, domain_only
@@ -72,7 +73,7 @@ BASE_EXAMPLES = DEFAULT_DATA_PATH
 _FORBIDDEN = ('"""', LEARNED_RULES_START.strip(), LEARNED_RULES_END.strip(), TRAINING_SECTION_START.strip())
 
 # A rule that tells the gate to output is_ad: true makes it remove more, whatever leaning it claims.
-_SAYS_AD = re.compile(r"is_ad\s*:\s*true", re.IGNORECASE)
+_SAYS_AD = re.compile(r"is_ad[\"']?\s*[:=]\s*true", re.IGNORECASE)
 
 
 class SeedError(RuntimeError):
@@ -229,6 +230,7 @@ class _AdPlan:
     rules: str
     new_examples: list[dict]
     example_keys: dict[str, str] = field(default_factory=dict)  # new example id -> its record key
+    rules_changed: bool = False
 
 
 @dataclass
@@ -248,6 +250,7 @@ class _Report:
     dedup_batches: int = 0
     dedup_skipped: int = 0
     ad_skipped: int = 0
+    ad_shifted: int = 0  # part of ad_skipped: the reply's correct contradicted the gate's record
     cost: float = 0.0
     second_calls: int = 0
     error: str = ""
@@ -317,8 +320,8 @@ class _Report:
                 second = "agreed" if m.second else "disagreed, so the change was dropped"
             out.append(f'- "{m.record.title}" ({m.record.source}). Gate verdict: {m.record.verdict}. '
                        f"Judge: {label} ({m.verdict.ad_type}), {m.verdict.reason}. Second opinion: {second}.")
-        out += [f"- Records skipped: {self.ad_skipped} (the judge returned no usable verdict for them, "
-                f"so they were not judged).", ""]
+        out += [f"- Records skipped: {self.ad_skipped} (no usable verdict: {self.ad_skipped - self.ad_shifted}; "
+                f"label didn't match the gate's record: {self.ad_shifted}). They were not judged.", ""]
 
         hidden = [m for m in self.mistakes if not m.verdict.visible_in_excerpt]
         if hidden:
@@ -404,6 +407,7 @@ class _Tuner:
         judgement = judge_ads(records, self.tuning) if records else AdJudgement([], [], 0.0)
         self.rep.cost += judgement.cost_usd
         self.rep.ad_skipped = judgement.skipped
+        self.rep.ad_shifted = judgement.shifted
         self.rep.judged_ads -= judgement.skipped
         cases: list[DedupCase] = []
         if dedups:
@@ -459,6 +463,12 @@ class _Tuner:
         agrees, cost = second_opinion_dedup(case, self.tuning)
         self.rep.cost += cost
         return agrees
+
+    def _second_dedup_groups(self, case: DedupCase) -> list[list[int]] | None:
+        self.rep.second_calls += 1
+        groups, cost = second_opinion_dedup_groups(case, self.tuning)
+        self.rep.cost += cost
+        return groups
 
     def _second_opinions(self, records: list[AdRecord], judgement: AdJudgement) -> list[_Mistake]:
         by_key = {r.key: r for r in records}
@@ -531,13 +541,14 @@ class _Tuner:
         by_key = {r.key: r for r in records}
         news = [by_key[v.key] for v in judgement.verdicts if not v.is_ad]
         proposed = [(rule, self.rep.rule_lines) for rule in judgement.proposed_rules]
-        proposed += [(ProposedRule(text=t, leaning="keep"), self.rep.seed_lines) for t in seed_rules or []]
+        # Seed rules have no stated leaning, so each gets the rule second opinion.
+        proposed += [(ProposedRule(text=t, leaning="remove"), self.rep.seed_lines) for t in seed_rules or []]
         rules = self._plan_rules(proposed, news)
         if not new and not seed and rules is None:
             return None
         return _AdPlan(examples=stored + new + seed,
                        rules=rules if rules is not None else self.store.ad_rules().strip(),
-                       new_examples=new + seed, example_keys=example_keys)
+                       new_examples=new + seed, example_keys=example_keys, rules_changed=rules is not None)
 
     def _add_balancing_example(self, records: list[AdRecord], judgement: AdJudgement,
                                new: list[dict], known_ids: set[str], cap: int,
@@ -650,9 +661,10 @@ class _Tuner:
         self.candidate_attempted = True
         _install(self.config, text, self.candidate)
 
-    def _gate_ads(self, records: list[AdRecord], judgement: AdJudgement, mistakes: list[_Mistake],
-                  plan: _AdPlan) -> GateResult:
-        self._install_candidate(plan)
+    def _ad_cases(self, records: list[AdRecord], judgement: AdJudgement,
+                  mistakes: list[_Mistake]) -> tuple[list[Case], dict[str, AdRecord], set[str]]:
+        """Gate cases, today's case ids mapped to their records, and the ids of
+        today cases whose label the planning second opinion already disputed."""
         cases: list[Case] = []
         for prefix, examples in (("base", load_examples(BASE_EXAMPLES)), ("learned", self.store.ad_examples())):
             for e in examples:
@@ -664,21 +676,27 @@ class _Tuner:
         disputed = {m.record.key for m in mistakes if m.second is False}
         by_key = {r.key: r for r in records}
         today: dict[str, AdRecord] = {}
+        settled: set[str] = set()
         for v in judgement.verdicts:
             record = by_key[v.key]
+            case_id = f"today:{record.key[:8]}"
             if record.key in disputed:
                 # The two judges disagree, so trust the gate: a candidate that
                 # changes this item's verdict counts as a regression.
                 expected, mistake = record.verdict == "ad", False
+                settled.add(case_id)
             else:
                 expected, mistake = v.is_ad, not v.correct
-            cases.append(Case(id=f"today:{record.key[:8]}", title=record.title, text=record.text_sent,
+            cases.append(Case(id=case_id, title=record.title, text=record.text_sent,
                               expected=expected, today_mistake=mistake,
                               countable=v.visible_in_excerpt if mistake else True))
-            today[cases[-1].id] = record
+            today[case_id] = record
         self.rep.case_titles.update({c.id: c.title for c in cases})
-        self.log(f"tune {self.date}: ads gate, {len(cases)} cases")
+        return cases, today, settled
 
+    def _score_ads(self, cases: list[Case]) -> tuple[list[bool], list[bool]]:
+        """(current_ok, candidate_ok) for the installed live and candidate models."""
+        self.log(f"tune {self.date}: ads gate, {len(cases)} cases")
         current_ok = [p == c.expected for p, c in zip(predict_ads(self.live, cases), cases, strict=True)]
         candidate_ok = [p == c.expected for p, c in zip(predict_ads(self.candidate, cases), cases, strict=True)]
 
@@ -687,49 +705,68 @@ class _Tuner:
             return (predict_ads(self.live, [c])[0] == c.expected,
                     predict_ads(self.candidate, [c])[0] == c.expected)
 
-        candidate_ok = stabilize(current_ok, candidate_ok, rerun)
+        return current_ok, stabilize(current_ok, candidate_ok, rerun)
+
+    def _gate_ads(self, records: list[AdRecord], judgement: AdJudgement, mistakes: list[_Mistake],
+                  plan: _AdPlan) -> GateResult:
+        self._install_candidate(plan)
+        cases, today, settled = self._ad_cases(records, judgement, mistakes)
+        current_ok, candidate_ok = self._score_ads(cases)
         result = decide(cases, current_ok, candidate_ok)
         expected = {c.id: c.expected for c in cases}
 
-        def check(case_id: str) -> bool | None:
+        def disputes(case_id: str) -> bool | None:
             is_ad = self._second_ad(today[case_id])
-            return None if is_ad is None else is_ad == expected[case_id]
+            return None if is_ad is None else is_ad != expected[case_id]
 
-        result, gone = self._settle_blockers("Ads", result, cases, current_ok, candidate_ok,
-                                             {cid: check for cid in today})
-        if gone:
-            keys = {today[cid].key for cid in gone}
-            drop = {eid for eid, key in plan.example_keys.items() if key in keys}
-            if drop:
-                plan.examples = [e for e in plan.examples if str(e.get("id")) not in drop]
-                plan.new_examples = [e for e in plan.new_examples if str(e.get("id")) not in drop]
-                self.rep.blocker_lines.append(
-                    f"- Dropped from the saved change, since their label is disputed: {', '.join(sorted(drop))}.")
-        return result
+        # A case whose dispute the planning second opinion already settled always blocks.
+        checks = {cid: disputes for cid in today if cid not in settled}
+        result, gone = self._settle_blockers("Ads", result, cases, current_ok, candidate_ok, checks)
+        if not gone:
+            return result
+        keys = {today[cid].key for cid in gone}
+        drop = {eid for eid, key in plan.example_keys.items() if key in keys}
+        if not drop or not result.accepted:
+            return result
+
+        # The applied change must be the gated one: rebuild without the disputed
+        # examples and gate once more, with no second opinions this time.
+        plan.examples = [e for e in plan.examples if str(e.get("id")) not in drop]
+        plan.new_examples = [e for e in plan.new_examples if str(e.get("id")) not in drop]
+        self.rep.blocker_lines.append(
+            f"- Ads: dropped the disputed examples {', '.join(sorted(drop))} and gated the change again.")
+        if not plan.new_examples and not plan.rules_changed:
+            self.rep.blocker_lines.append("- Ads: nothing new is left after the drops, so nothing is applied.")
+            return GateResult(False, "nothing new is left after dropping disputed examples",
+                              result.current_errors, result.candidate_errors, [], [])
+        self._install_candidate(plan)
+        remaining = [c for c in cases if c.id not in gone]
+        current_ok, candidate_ok = self._score_ads(remaining)
+        return decide(remaining, current_ok, candidate_ok)
 
     def _settle_blockers(self, name: str, result: GateResult, cases: list[Case], current_ok: list[bool],
                          candidate_ok: list[bool],
                          checks: dict[str, Callable[[str], bool | None]]) -> tuple[GateResult, set[str]]:
-        """When a gate rejects and every broken case came from today's judge,
-        ask a blind second opinion about each. checks maps a today case id to
-        a call returning True when the second opinion agrees with the case's
-        label, False when it disagrees, and None for a malformed reply. A
-        disputed case is dropped and decide runs again on the rest, reusing
-        the ok lists. Returns (result, disputed ids)."""
+        """When a gate rejects and every broken case is in checks, ask a blind
+        second opinion about each. checks maps a case id to a call returning
+        True when the second opinion disputes the case, False when it supports
+        the case's label, and None for a malformed reply. A disputed case is
+        dropped and decide runs again on the rest, reusing the ok lists.
+        Returns (result, disputed ids)."""
         if result.accepted or not result.broken or not all(b in checks for b in result.broken):
             return result, set()
         self.log(f"tune {self.date}: second opinions on {len(result.broken)} {name.lower()} gate blockers")
         disputed: set[str] = set()
         for case_id in result.broken:
-            agrees = checks[case_id](case_id)
+            verdict = checks[case_id](case_id)
             where = f"- {name}: {case_id} ({self.rep.case_titles.get(case_id, '')})"
-            if agrees is False:
+            if verdict is True:
                 disputed.add(case_id)
                 self.rep.blocker_lines.append(f"{where}: disputed, not counted.")
-            elif agrees is None:
+            elif verdict is None:
                 self.rep.blocker_lines.append(f"{where}: no usable second opinion, so it still blocks.")
             else:
-                self.rep.blocker_lines.append(f"{where}: the second opinion agrees with the first judge, "
+                self.rep.blocker_lines.append(f"{where}: the second opinion supports the first judge's label, "
                                               "so it still blocks.")
         if not disputed:
             return result, set()
@@ -737,7 +774,10 @@ class _Tuner:
         result = decide([cases[i] for i in keep], [current_ok[i] for i in keep], [candidate_ok[i] for i in keep])
         return result, disputed
 
-    def _gate_dedup(self, plan: _DedupPlan) -> GateResult:
+    def _score_dedup(self, plan: _DedupPlan) -> tuple[list[DedupCase], list[Case], list[bool], list[bool],
+                                                      list[set[int]]]:
+        """Score the current block and the plan's block on every case in the plan.
+        Returns (cases, gate cases, current_ok, candidate_ok, candidate drops)."""
         cases = [DedupCase(titles=list(c["titles"]), expected_groups=[list(g) for g in c["expected_groups"]],
                            kind=str(c.get("kind", "")), note=str(c.get("note", ""))) for c in plan.cases]
         first_new = len(cases) - plan.new_count
@@ -748,27 +788,47 @@ class _Tuner:
         current_block = self.store.dedup_examples_block()
         candidate_block = TuningStore.dedup_block_for(plan.cases)
 
-        def ok(block: str, subset: list[DedupCase]) -> list[bool]:
-            return [dedup_case_ok(c, d) for c, d in zip(subset, predict_dedup(subset, model, block), strict=True)]
+        def ok(block: str, subset: list[DedupCase]) -> tuple[list[bool], list[set[int]]]:
+            drops = predict_dedup(subset, model, block)
+            return [dedup_case_ok(c, d) for c, d in zip(subset, drops, strict=True)], drops
 
-        current_ok = ok(current_block, cases)
-        candidate_ok = ok(candidate_block, cases)
+        current_ok, _ = ok(current_block, cases)
+        candidate_ok, candidate_drops = ok(candidate_block, cases)
 
         def rerun(i: int) -> tuple[bool, bool]:
-            return ok(current_block, [cases[i]])[0], ok(candidate_block, [cases[i]])[0]
+            return ok(current_block, [cases[i]])[0][0], ok(candidate_block, [cases[i]])[0][0]
 
-        candidate_ok = stabilize(current_ok, candidate_ok, rerun)
+        return cases, meta, current_ok, stabilize(current_ok, candidate_ok, rerun), candidate_drops
+
+    def _gate_dedup(self, plan: _DedupPlan) -> GateResult:
+        cases, meta, current_ok, candidate_ok, candidate_drops = self._score_dedup(plan)
         result = decide(meta, current_ok, candidate_ok)
-        checks = {m.id: (lambda cid: self._second_dedup(cases[int(cid.split(":")[1])]))
-                  for m in meta if m.today_mistake}
+
+        def disputes(case_id: str) -> bool | None:
+            # Disputed only when the candidate's drops are right under the second
+            # opinion's own groups; any other mismatch leaves the case blocking.
+            i = int(case_id.split(":")[1])
+            groups = self._second_dedup_groups(cases[i])
+            if groups is None:
+                return None
+            theirs = DedupCase(titles=cases[i].titles, expected_groups=groups, kind=cases[i].kind, note="")
+            return dedup_case_ok(theirs, candidate_drops[i])
+
+        checks = {m.id: disputes for m in meta if m.today_mistake}
         result, gone = self._settle_blockers("Dedup", result, meta, current_ok, candidate_ok, checks)
-        if gone:
-            drop = {int(cid.split(":")[1]) for cid in gone}
-            plan.cases = [c for i, c in enumerate(plan.cases) if i not in drop]
-            plan.new_count -= len(drop)
-            self.rep.blocker_lines.append(
-                f"- Dropped {len(drop)} disputed dedup cases from the saved change.")
-        return result
+        if not gone or not result.accepted:
+            return result
+        # The saved block must be the gated one: drop the disputed cases and gate once more.
+        drop = {int(cid.split(":")[1]) for cid in gone}
+        plan.cases = [c for i, c in enumerate(plan.cases) if i not in drop]
+        plan.new_count -= len(drop)
+        self.rep.blocker_lines.append(f"- Dedup: dropped {len(drop)} disputed cases and gated the change again.")
+        if plan.new_count <= 0:
+            self.rep.blocker_lines.append("- Dedup: nothing new is left after the drops, so nothing is applied.")
+            return GateResult(False, "nothing new is left after dropping disputed cases",
+                              result.current_errors, result.candidate_errors, [], [])
+        _, meta, current_ok, candidate_ok, _ = self._score_dedup(plan)
+        return decide(meta, current_ok, candidate_ok)
 
     def _undo(self, snap: Path, rebuild: bool) -> None:
         """Put the learned files (and, with rebuild, the live model) back as the snapshot has them."""

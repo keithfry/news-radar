@@ -85,6 +85,9 @@ class Fakes:
         self.second_ad_keys: list[str] = []
         self.second_ad_answers: dict[str, bool | None] = {}  # per record key; else second_opinion_ad
         self.second_dedup_answers: list[bool | None] = []  # answered in order; then second_opinion_dedup
+        self.second_dedup_groups: list[list[list[int]] | None] = []  # D1 blocker answers, in order
+        self.second_dedup_group_calls = 0
+        self.second_pass_break_ids: set[str] = set()  # case ids the candidate gets wrong once rebuilt
         self.candidate_break_ids: set[str] = set()  # case ids the candidate gets wrong
         self.ad_case_ids: list[str] = []
         self.candidate_fix = False
@@ -136,12 +139,19 @@ class Fakes:
 
     def second_ad(self, record, tuning):
         self.second_ad_keys.append(record.key)
-        return self.second_ad_answers.get(record.key, self.second_opinion_ad), self.second_cost
+        answer = self.second_ad_answers.get(record.key, self.second_opinion_ad)
+        if isinstance(answer, list):
+            answer = answer.pop(0)
+        return answer, self.second_cost
 
     def second_dedup(self, case, tuning):
         if self.second_dedup_answers:
             return self.second_dedup_answers.pop(0), self.second_cost
         return self.second_opinion_dedup, self.second_cost
+
+    def second_dedup_groups_fake(self, case, tuning):
+        self.second_dedup_group_calls += 1
+        return self.second_dedup_groups.pop(0), self.second_cost
 
     def second_rule(self, rule_text, records, tuning):
         self.rule_checks.append((rule_text, list(records)))
@@ -158,6 +168,8 @@ class Fakes:
                 if self.candidate_break_base and c.id.startswith("base:"):
                     p = not c.expected
                 if c.id in self.candidate_break_ids:
+                    p = not c.expected
+                if c.id in self.second_pass_break_ids and self.installed.count(CANDIDATE) >= 2:
                     p = not c.expected
             out.append(p)
         return out
@@ -188,6 +200,12 @@ def fakes(monkeypatch):
     monkeypatch.setattr(tuner, "second_opinion_ad", f.second_ad)
     monkeypatch.setattr(tuner, "second_opinion_dedup", f.second_dedup)
     monkeypatch.setattr(tuner, "second_opinion_rule", f.second_rule)
+    monkeypatch.setattr(tuner, "second_opinion_dedup_groups", f.second_dedup_groups_fake)
+
+    def no_real_claude(*a, **kw):
+        raise AssertionError("a test reached the real claude CLI")
+
+    monkeypatch.setattr(judge, "run_claude", no_real_claude)
     monkeypatch.setattr(tuner, "predict_ads", f.predict_ads)
     monkeypatch.setattr(tuner, "predict_dedup", f.predict_dedup)
     monkeypatch.setattr(tuner, "install_ad_detector_model", f.install)
@@ -521,7 +539,7 @@ def test_today_blocker_confirmed_by_second_opinion_still_rejects(cfg, evidence, 
     fakes.second_ad_answers = {"k_ok_aaaaaaaa": False}  # agrees: not an ad
     out = run_tune(cfg, DATE, log=lambda s: None)
     assert not out.ads_applied and store(cfg).ad_examples() == []
-    assert "agrees with the first judge, so it still blocks" in out.report_path.read_text()
+    assert "supports the first judge's label, so it still blocks" in out.report_path.read_text()
 
 
 def test_today_blocker_with_unusable_second_opinion_still_rejects(cfg, evidence, fakes):
@@ -543,11 +561,26 @@ def test_base_blocker_rejects_without_a_second_opinion(cfg, evidence, fakes):
 def test_dedup_blocker_disputed_is_dropped_from_gate_and_saved_cases(cfg, evidence, fakes):
     miss = DedupCase(titles=["Q one", "Q two"], expected_groups=[[0, 1]], kind="missed_duplicate", note="")
     fakes.dedup_cases = [WRONG_MERGE, miss]
-    fakes.second_dedup_answers = [True, False]  # agrees when planned, disputes it as a blocker
+    fakes.second_dedup_answers = [True]  # agrees when planned
+    fakes.second_dedup_groups = [[]]  # as a blocker: no duplicates, so the candidate's empty drop is right
     out = run_tune(cfg, DATE, log=lambda s: None)
+    text = out.report_path.read_text()
     assert out.dedup_applied
     assert [c["titles"] for c in store(cfg).dedup_cases()] == [WRONG_MERGE.titles]
-    assert "dedup:1 (Q one): disputed, not counted" in out.report_path.read_text()
+    assert "dedup:1 (Q one): disputed, not counted" in text and "gated the change again" in text
+
+
+def test_dedup_blocker_with_an_unrelated_group_mismatch_still_blocks(cfg, evidence, fakes):
+    miss = DedupCase(titles=["Q one", "Q two", "R one", "R two"], expected_groups=[[0, 1]],
+                     kind="missed_duplicate", note="")
+    fakes.dedup_cases = [WRONG_MERGE, miss]
+    fakes.second_dedup_answers = [True]
+    # The second opinion also pairs R one and R two, which differs from the case, but it
+    # still groups Q one with Q two, so the candidate's empty drop is wrong either way.
+    fakes.second_dedup_groups = [[[0, 1], [2, 3]]]
+    out = run_tune(cfg, DATE, log=lambda s: None)
+    assert not out.dedup_applied and store(cfg).dedup_cases() == []
+    assert "supports the first judge's label, so it still blocks" in out.report_path.read_text()
 
 
 def test_second_opinion_call_failure_on_a_blocker_applies_nothing(cfg, evidence, fakes, monkeypatch):
@@ -679,3 +712,72 @@ def test_rule_saying_is_ad_true_is_remove_leaning_whatever_the_judge_said(cfg, e
     assert [r for r, _ in fakes.rule_checks] == ["Output IS_AD :  True for a webinar invite."]
     assert "webinar" not in store(cfg).ad_rules()
     assert "treated as remove-leaning" in out.report_path.read_text()
+
+
+# ---------- Task 12 fix round 1 ----------
+
+def test_already_disputed_mistake_always_blocks_and_is_not_asked_again(cfg, evidence, fakes):
+    fakes.candidate_fixes_today_mistake()
+    fakes.judge_proposes_ad_example()  # the judge says k_ok, which the gate kept, is an ad
+    fakes.candidate_break_ids = {NEWS_CASE}  # the candidate removes k_ok
+    # Planning: the second opinion says k_ok is not an ad, so the dispute is settled. A re-ask
+    # would say ad. k_ad answers for the balancing example.
+    fakes.second_ad_answers = {"k_ok_aaaaaaaa": [False, True], "k_ad_aaaaaaaa": [True]}
+    out = run_tune(cfg, DATE, log=lambda s: None)
+    assert not out.ads_applied and store(cfg).ad_examples() == []
+    assert fakes.second_ad_keys.count("k_ok_aaaaaaaa") == 1
+
+
+def test_disputed_balancing_example_is_dropped_and_the_change_regated(cfg, evidence, fakes):
+    fakes.candidate_fixes_today_mistake()
+    fakes.candidate_break_ids = {"today:k_ad_aaa"}  # the candidate keeps the ad that gave the balancing example
+    fakes.second_ad_answers = {"k_ad_aaaaaaaa": [True, False]}  # agrees as balancing, disputes as a blocker
+    out = run_tune(cfg, DATE, log=lambda s: None)
+    ids = [e["id"] for e in store(cfg).ad_examples()]
+    text = out.report_path.read_text()
+    assert out.ads_applied and fakes.installed.count(CANDIDATE) == 2
+    assert not any(i.startswith("hustle") for i in ids) and any(i.startswith("the-ai-report") for i in ids)
+    assert "gated the change again" in text
+    # The live model is built from the re-gated plan, without the disputed example.
+    assert "Refer a friend and win" not in fakes.modelfiles[LIVE]
+
+
+def test_regate_rejects_on_any_broken_case_without_second_opinions(cfg, evidence, fakes):
+    fakes.candidate_fixes_today_mistake()
+    fakes.candidate_break_ids = {"today:k_ad_aaa"}
+    fakes.second_ad_answers = {"k_ad_aaaaaaaa": [True, False]}
+    fakes.second_pass_break_ids = {NEWS_CASE}  # the rebuilt candidate breaks a today case
+    out = run_tune(cfg, DATE, log=lambda s: None)
+    assert not out.ads_applied and store(cfg).ad_examples() == [] and LIVE not in fakes.installed
+    assert "k_ok_aaaaaaaa" not in fakes.second_ad_keys
+
+
+@pytest.mark.parametrize("text", ['Return {"is_ad": true} for a webinar invite.', "Set is_ad=true for promos.",
+                                  "Output is_ad : TRUE when it pitches."])
+def test_rule_writing_is_ad_true_any_way_is_remove_leaning(cfg, evidence, fakes, text):
+    fakes.candidate_fixes_today_mistake()
+    fakes.second_opinion_rule = False
+    fakes.rules = [ProposedRule(text, "keep")]
+    run_tune(cfg, DATE, log=lambda s: None)
+    assert [r for r, _ in fakes.rule_checks] == [text] and store(cfg).ad_rules() == ""
+
+
+def test_report_counts_shifted_verdicts_separately(cfg, evidence, fakes, monkeypatch):
+    real = fakes.judge_ads
+
+    def with_shift(records, tuning):
+        out = real(records, tuning)
+        out.verdicts = out.verdicts[:-1]
+        out.skipped, out.shifted = 2, 1
+        return out
+
+    monkeypatch.setattr(tuner, "judge_ads", with_shift)
+    text = run_tune(cfg, DATE, log=lambda s: None).report_path.read_text()
+    assert "Records skipped: 2 (no usable verdict: 1; label didn't match the gate's record: 1)" in text
+
+
+def test_every_seed_rule_gets_the_rule_second_opinion(cfg, evidence, fakes, tmp_path):
+    fakes.candidate_fixes_today_mistake()
+    seed = write_seed(tmp_path, rules="Judge the whole item.\nKeep newsletter issues.\n")
+    run_tune(cfg, DATE, log=lambda s: None, seed_dir=seed)
+    assert [r for r, _ in fakes.rule_checks] == ["Judge the whole item.", "Keep newsletter issues."]

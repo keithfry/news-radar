@@ -20,8 +20,9 @@ model's 4096-token context on long items.
 
 Every item except arXiv papers goes to the ad model. There is no title-phrase
 pre-check and no webinar check on the summary: across 54 daily logs they removed
-5 items in two months, 2 of them news, and nothing judged their decisions. Now
-the daily tuner judges every removal.
+5 items in two months, 2 of them news, and nothing judged their decisions. The
+daily tuner now judges the ad gate's removals, up to `[tuning] max_items_per_run`
+items a day. Removals past that cap are not judged.
 
 arXiv items skip the ad gate. Each verdict is remembered for the run, so emails
 and linked articles are checked once, not once per topic.
@@ -59,7 +60,7 @@ Schema per example:
 
 ## Daily Tuner
 
-`newsradar tune --config <config> [--date YYYY-MM-DD] [--rebuild] [--rollback YYYY-MM-DD]`
+`newsradar tune --config <config> [--date YYYY-MM-DD] [--include-seed DIR] [--rebuild] [--rollback YYYY-MM-DD]`
 reviews one day of ad-gate and dedup decisions, asks a judge model (Claude) to find
 mistakes, and applies a change only if it passes a regression gate. It runs only when
 `[tuning] enabled = true` in the config. A tuner failure never changes the exit status
@@ -90,6 +91,17 @@ so nothing sensitive from a URL is stored. Evidence, snapshots and reports older
 judge's verdict and second opinion, the proposed example, rule and dedup changes, the
 regression gate results, what was applied, the judge cost, and clean-up. It ends with
 the exact `--rebuild` and `--rollback` commands for that config.
+
+### Seeding learned data
+
+`--include-seed DIR` adds the `learned_ad_examples.json` and `learned_ad_rules.txt`
+in DIR to that day's proposals. Seed examples get the same checks as the judge's
+(forbidden Modelfile text, 200-character summaries, domain-only links) but not the
+per-day cap, and keep their own `added` date. Every seed rule needs the rule
+second opinion's approval. The seed is saved only when the ads gate accepts the
+change, and the gate accepts only on a day where the candidate also fixes at least
+one of that day's countable mistakes. On a day with no such fix, the seed is not
+saved; run it again on another day. The pending seed lives in `data/tuning/seed/`.
 
 ### Rebuild and rollback
 

@@ -19,6 +19,7 @@ from newsradar.tuning.judge import (
     judge_dedup,
     second_opinion_ad,
     second_opinion_dedup,
+    second_opinion_dedup_groups,
     second_opinion_rule,
 )
 
@@ -164,7 +165,13 @@ def test_sent_correct_that_contradicts_the_derived_one_is_skipped(fake_claude):
     shifted = {**verdict("r1"), "is_ad": True, "ad_type": "sponsor_content", "correct": True}
     fake_claude.reply = reply_for(verdict("r0"), shifted, verdict("r2"))
     out = judge_ads([rec("a"), rec("b"), rec("c")], TUNING)
-    assert [v.key for v in out.verdicts] == ["a", "c"] and out.skipped == 1
+    assert [v.key for v in out.verdicts] == ["a", "c"] and out.skipped == 1 and out.shifted == 1
+
+
+def test_missing_verdict_is_skipped_but_not_shifted(fake_claude):
+    fake_claude.reply = reply_for(verdict("r0"), verdict("r2"))
+    out = judge_ads([rec("a"), rec("b"), rec("c")], TUNING)
+    assert out.skipped == 1 and out.shifted == 0
 
 
 def test_mostly_shifted_batch_raises(fake_claude):
@@ -437,6 +444,12 @@ def test_second_opinion_dedup_prompt_hides_expected_groups_and_note(fake_claude)
     prompt = fake_claude.calls[0]["prompt"]
     assert "FIRST-NOTE" not in prompt and "missed_duplicate" not in prompt and "[[0, 1]]" not in prompt
     assert "A launches" in prompt
+
+
+def test_second_opinion_dedup_groups_returns_the_groups(fake_claude):
+    fake_claude.cost = 0.02
+    fake_claude.reply = lambda p: {"groups": [[2, 3]], "reason": "x"}
+    assert second_opinion_dedup_groups(CASE, TUNING) == ([[2, 3]], 0.02)
 
 
 def test_second_opinion_dedup_bad_index_is_none(fake_claude):
