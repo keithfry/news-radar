@@ -127,6 +127,13 @@ saved; run it again on another day. The pending seed lives in `data/tuning/seed/
 The tuner builds a `*-candidate` model to test a change and removes it at the end
 of the run. A bare `ollama create` drops learned data, as the Ongoing Workflow section explains.
 
+The tuner and `newsradar ad-detector install` look for the `ollama` command on PATH,
+then at `/usr/local/bin/ollama`, then at `/opt/homebrew/bin/ollama`, so a launchd job
+with a short PATH still finds it. Before the first judge call, each run checks that
+the command resolves and that `ollama show --modelfile` can read the live model. If
+either check fails, the report says why, the run applies nothing, and no Claude call
+is made. A day with no evidence skips the check, since it makes no paid calls.
+
 ## Ongoing Workflow
 
 ### When new ads slip through the digest

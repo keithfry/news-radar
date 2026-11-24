@@ -5,7 +5,9 @@ and writes a report.
 Both gates run before either part is applied. Any failed judge, second
 opinion, candidate build or gate call means nothing is applied for either
 part. The tuner writes only under `[tuning] data_dir` and to the local Ollama
-models, and never runs git.
+models, and never runs git. Before the first judge call, a preflight checks
+that the ollama command resolves and that the live model's Modelfile reads. If
+either fails, the run stops there and spends nothing.
 
 When the ads or dedup gate rejects only because it broke cases from today's
 judge, each of those cases gets a blind second opinion. A case the second
@@ -40,6 +42,7 @@ from newsradar.ad_detector.update_modelfile import (
 )
 from newsradar.claude_cli import ClaudeCallError
 from newsradar.config import Config
+from newsradar.ollama_cli import OllamaNotFoundError, ollama_bin
 from newsradar.tuning.evidence import AdRecord, load_day, prune_evidence
 from newsradar.tuning.gate import (
     Case,
@@ -96,6 +99,11 @@ class SnapshotError(RuntimeError):
     """`ollama show --modelfile` failed, so the live model can't be snapshotted."""
 
 
+class PreflightError(RuntimeError):
+    """The ollama command or the live model's Modelfile is out of reach, so the
+    run stops before any paid judge call."""
+
+
 # A failure of any of these means the run can't trust its results and applies nothing.
 _RUN_ERRORS = (JudgeError, ClaudeCallError, GateError, SeedError, SnapshotError,
                subprocess.CalledProcessError, OSError)
@@ -126,7 +134,7 @@ def installed_modelfile(name: str) -> str:
     """The Modelfile of the installed model, from `ollama show --modelfile`.
     Raises SnapshotError when the call fails or prints nothing."""
     try:
-        proc = subprocess.run(["ollama", "show", "--modelfile", name], capture_output=True, text=True,
+        proc = subprocess.run([ollama_bin(), "show", "--modelfile", name], capture_output=True, text=True,
                               check=True, timeout=120)
     except subprocess.CalledProcessError as exc:
         raise SnapshotError(f"ollama show --modelfile {name} exited {exc.returncode}: "
@@ -141,7 +149,7 @@ def installed_modelfile(name: str) -> str:
 def remove_ollama_model(name: str) -> None:
     """Run `ollama rm`, ignoring every failure (the model may not exist)."""
     try:
-        subprocess.run(["ollama", "rm", name], capture_output=True, text=True, check=False, timeout=120)
+        subprocess.run([ollama_bin(), "rm", name], capture_output=True, text=True, check=False, timeout=120)
     except (OSError, subprocess.SubprocessError):
         pass
 
@@ -456,6 +464,7 @@ class _Tuner:
             self.log(f"tune {self.date}: no evidence for this date")
             return
         self.log(f"tune {self.date}: loaded {len(ads)} ad records and {len(dedups)} dedup batches")
+        self._preflight()
 
         records = self._select_ads(ads)
         if records:
@@ -499,6 +508,15 @@ class _Tuner:
             ad_plan if self.rep.ad_gate and self.rep.ad_gate.accepted else None,
             dedup_plan if self.rep.dedup_gate and self.rep.dedup_gate.accepted else None,
         )
+
+    def _preflight(self) -> None:
+        """Check, before any paid judge call, what the gate and the snapshot need
+        later: the ollama command resolves and the live model's Modelfile reads."""
+        try:
+            ollama_bin()
+            installed_modelfile(self.live)
+        except (OllamaNotFoundError, SnapshotError) as exc:
+            raise PreflightError(f"{type(exc).__name__}: {exc}") from exc
 
     def _select_ads(self, ads: list[AdRecord]) -> list[AdRecord]:
         ordered = [r for r in ads if r.verdict == "ad"] + [r for r in ads if r.verdict != "ad"]
@@ -987,6 +1005,8 @@ def run_tune(config: Config, date: str, log: Callable[[str], None] | None = None
     tuner = _Tuner(config, date, report, outcome, log, seed_dir)
     try:
         tuner.run()
+    except PreflightError as exc:
+        report.error = f"Preflight failed, so the run made no judge calls and applied nothing: {exc}"
     except _RUN_ERRORS as exc:
         if isinstance(exc, JudgeError):
             report.cost += exc.cost_usd  # calls that ran before the failure still cost

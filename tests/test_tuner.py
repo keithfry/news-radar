@@ -101,7 +101,9 @@ class Fakes:
         self.removed: list[str] = []
         self.live_text = 'FROM /blobs/live-weights\nSYSTEM """the live model before this run"""\n'
         self.show_error = False
+        self.show_fail_from: int | None = None  # fail from this call on (0 is the preflight read)
         self.shown: list[str] = []
+        self.ollama_missing = False
 
     # scenario helpers
     def candidate_fixes_today_mistake(self):
@@ -200,9 +202,15 @@ class Fakes:
     def show(self, model_name):
         """`ollama show --modelfile`: what the fake last installed under that name."""
         self.shown.append(model_name)
-        if self.show_error:
+        failing = self.show_fail_from is not None and len(self.shown) > self.show_fail_from
+        if self.show_error or failing:
             raise tuner.SnapshotError("ollama show failed")
         return self.modelfiles.get(model_name, self.live_text)
+
+    def ollama_bin(self):
+        if self.ollama_missing:
+            raise tuner.OllamaNotFoundError("can't find the ollama command")
+        return "/fake/bin/ollama"
 
 
 @pytest.fixture
@@ -219,6 +227,12 @@ def fakes(monkeypatch):
         raise AssertionError("a test reached the real claude CLI")
 
     monkeypatch.setattr(judge, "run_claude", no_real_claude)
+
+    def no_real_subprocess(*a, **kw):
+        raise AssertionError("a test reached the real subprocess.run")
+
+    monkeypatch.setattr(subprocess, "run", no_real_subprocess)
+    monkeypatch.setattr(tuner, "ollama_bin", f.ollama_bin)
     monkeypatch.setattr(tuner, "predict_ads", f.predict_ads)
     monkeypatch.setattr(tuner, "predict_dedup", f.predict_dedup)
     monkeypatch.setattr(tuner, "install_ad_detector_model", f.install)
@@ -801,14 +815,14 @@ def test_snapshot_stores_the_live_modelfile_from_ollama_show(cfg, evidence, fake
     fakes.candidate_fixes_today_mistake()
     run_tune(cfg, DATE, log=lambda s: None)
     snap = store(cfg).latest_snapshot(DATE)
-    assert fakes.shown == [LIVE] and (snap / "Modelfile").read_text() == fakes.live_text
+    assert fakes.shown == [LIVE, LIVE] and (snap / "Modelfile").read_text() == fakes.live_text  # preflight, snapshot
     assert json.loads((snap / "applied.json").read_text()) == {"parts": ["ads"]}
 
 
 def test_failed_ollama_show_applies_nothing(cfg, evidence, fakes):
     fakes.candidate_fixes_today_mistake()
     fakes.dedup_cases = [WRONG_MERGE]
-    fakes.show_error = True
+    fakes.show_fail_from = 1  # the preflight read works; the snapshot's read fails
     out = run_tune(cfg, DATE, log=lambda s: None)
     s = store(cfg)
     assert not out.ads_applied and not out.dedup_applied
@@ -825,8 +839,78 @@ def test_installed_modelfile_runs_ollama_show(monkeypatch):
         return subprocess.CompletedProcess(cmd, 0, "FROM /blobs/x\nSYSTEM hi\n", "")
 
     monkeypatch.setattr(tuner.subprocess, "run", fake_run)
+    monkeypatch.setattr(tuner, "ollama_bin", lambda: "/usr/local/bin/ollama")
     assert tuner.installed_modelfile(LIVE) == "FROM /blobs/x\nSYSTEM hi\n"
-    assert calls == [["ollama", "show", "--modelfile", LIVE]]
+    assert calls == [["/usr/local/bin/ollama", "show", "--modelfile", LIVE]]
+
+
+def test_installed_modelfile_without_ollama_raises_snapshot_error(monkeypatch):
+    def missing():
+        raise tuner.OllamaNotFoundError("can't find the ollama command")
+
+    monkeypatch.setattr(tuner, "ollama_bin", missing)
+    with pytest.raises(tuner.SnapshotError, match="can't find the ollama command"):
+        tuner.installed_modelfile(LIVE)
+
+
+def test_remove_ollama_model_runs_the_resolved_binary(monkeypatch):
+    calls = []
+    monkeypatch.setattr(tuner.subprocess, "run", lambda cmd, **kw: calls.append(cmd))
+    monkeypatch.setattr(tuner, "ollama_bin", lambda: "/opt/homebrew/bin/ollama")
+    tuner.remove_ollama_model(CANDIDATE)
+    assert calls == [["/opt/homebrew/bin/ollama", "rm", CANDIDATE]]
+
+
+def test_remove_ollama_model_ignores_a_missing_ollama(monkeypatch):
+    def missing():
+        raise tuner.OllamaNotFoundError("can't find the ollama command")
+
+    def no_run(*a, **kw):
+        raise AssertionError("subprocess.run called")
+
+    monkeypatch.setattr(tuner, "ollama_bin", missing)
+    monkeypatch.setattr(tuner.subprocess, "run", no_run)
+    tuner.remove_ollama_model(CANDIDATE)  # no raise
+
+
+# ---------- preflight: ollama and the live Modelfile, before any paid call ----------
+
+class _NoJudge:
+    def __init__(self):
+        self.calls = 0
+
+    def __call__(self, *a, **kw):
+        self.calls += 1
+        raise AssertionError("the preflight should have stopped the run before any judge call")
+
+
+@pytest.mark.parametrize("failure", ["no_ollama", "no_modelfile"])
+def test_preflight_failure_makes_no_judge_calls_and_applies_nothing(cfg, evidence, fakes, monkeypatch, failure):
+    no_ads, no_dedup = _NoJudge(), _NoJudge()
+    monkeypatch.setattr(tuner, "judge_ads", no_ads)
+    monkeypatch.setattr(tuner, "judge_dedup", no_dedup)
+    if failure == "no_ollama":
+        fakes.ollama_missing = True
+    else:
+        fakes.show_error = True
+    out = run_tune(cfg, DATE, log=lambda s: None)
+    text = out.report_path.read_text()
+    assert no_ads.calls == 0 and no_dedup.calls == 0 and fakes.second_ad_keys == []
+    assert not out.ads_applied and not out.dedup_applied and fakes.installed == []
+    assert store(cfg).latest_snapshot(DATE) is None and store(cfg).ad_examples() == []
+    assert "Preflight failed" in text and "no judge calls" in text
+    assert ("can't find the ollama command" if failure == "no_ollama" else "ollama show failed") in text
+    assert "$0.00" in text
+
+
+def test_preflight_reads_the_live_modelfile_before_judging(cfg, evidence, fakes, monkeypatch):
+    order = []
+    real_show, real_judge = fakes.show, fakes.judge_ads
+    monkeypatch.setattr(tuner, "installed_modelfile", lambda name: (order.append("show"), real_show(name))[1])
+    monkeypatch.setattr(tuner, "judge_ads",
+                        lambda records, tuning: (order.append("judge"), real_judge(records, tuning))[1])
+    run_tune(cfg, DATE, log=lambda s: None)
+    assert order[:2] == ["show", "judge"]
 
 
 @pytest.mark.parametrize("outcome", ["exit", "empty", "missing"])
@@ -858,7 +942,7 @@ def test_dedup_only_day_snapshots_without_ollama_and_rollback_leaves_the_ad_mode
     out = run_tune(cfg, DATE, log=lambda s: None)
     s = store(cfg)
     snap = s.latest_snapshot(DATE)
-    assert out.dedup_applied and fakes.shown == [] and not (snap / "Modelfile").exists()
+    assert out.dedup_applied and fakes.shown == [LIVE] and not (snap / "Modelfile").exists()  # preflight only
     assert json.loads((snap / "applied.json").read_text()) == {"parts": ["dedup"]}
     later = [{"id": "later", "title": "t", "summary": "s", "is_ad": False, "ad_type": "not_ad"}]
     s.save_ad_examples(later)  # an ads change made after that day
