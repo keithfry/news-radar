@@ -22,6 +22,10 @@ DEDUP_CASES_FILE = "learned_dedup_cases.json"
 _DATED_NAME = re.compile(r"(\d{4}-\d{2}-\d{2})(?:-(\d+))?")
 
 
+class BadSnapshotError(ValueError):
+    """A snapshot's applied.json doesn't parse or doesn't hold a list of parts."""
+
+
 def _dated(name: str) -> tuple[_date, int] | None:
     """Read "2026-11-23" or a same-day "2026-11-23-2" as (date, n). None if it doesn't parse."""
     m = _DATED_NAME.fullmatch(name)
@@ -139,17 +143,28 @@ class TuningStore:
             if src.exists():
                 shutil.copy2(src, path / src.name)
         if live_modelfile is not None:
-            (path / _MODELFILE_NAME).write_text(live_modelfile, encoding="utf-8")
-        (path / _PARTS_NAME).write_text(json.dumps({"parts": list(parts)}) + "\n", encoding="utf-8")
+            self._write(path / _MODELFILE_NAME, live_modelfile)
+        # Written last, so a snapshot with applied.json has everything else.
+        self._write(path / _PARTS_NAME, json.dumps({"parts": list(parts)}) + "\n")
         return path
 
     def snapshot_parts(self, snapshot_dir: Path) -> list[str]:
         """The parts a snapshot's run applied. A snapshot with no record of
-        them counts as both."""
+        them counts as both. Raises BadSnapshotError when applied.json doesn't
+        parse or holds no list of parts."""
         path = Path(snapshot_dir) / _PARTS_NAME
         if not path.exists():
             return list(SNAPSHOT_PARTS)
-        return [p for p in json.loads(path.read_text(encoding="utf-8"))["parts"] if p in SNAPSHOT_PARTS]
+        try:
+            parts = json.loads(path.read_text(encoding="utf-8"))["parts"]
+        except (ValueError, KeyError, TypeError) as exc:
+            raise BadSnapshotError(f"{path} is damaged: {type(exc).__name__}: {exc}") from exc
+        if not isinstance(parts, list):
+            raise BadSnapshotError(f"{path} is damaged: parts is not a list")
+        return [p for p in parts if p in SNAPSHOT_PARTS]
+
+    def has_modelfile(self, snapshot_dir: Path) -> bool:
+        return (Path(snapshot_dir) / _MODELFILE_NAME).is_file()
 
     def restore(self, snapshot_dir: Path, parts: list[str] | None = None) -> str | None:
         """Put back the learned files of the snapshot's parts (or of parts when

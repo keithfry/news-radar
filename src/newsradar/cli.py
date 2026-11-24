@@ -671,10 +671,12 @@ def _run_tune_command(args: argparse.Namespace, parser: argparse.ArgumentParser)
         print(f"Rebuilt {tuner.live_model_name(config)} from base plus learned data")
         return
     if args.rollback:
+        from .tuning.store import BadSnapshotError
+
         try:
             reinstalled = tuner.rollback(config, args.rollback)
-        except FileNotFoundError as e:
-            parser.exit(1, f"{e}\n")
+        except (FileNotFoundError, BadSnapshotError) as e:
+            parser.exit(1, f"rollback failed: {e}\n")
         if reinstalled:
             print(f"Restored the {args.rollback} snapshot and reinstalled {tuner.live_model_name(config)}")
         else:

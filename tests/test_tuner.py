@@ -511,6 +511,48 @@ def test_rollback_without_snapshot_raises(cfg, fakes):
         rollback(cfg, DATE)
 
 
+def test_rollback_of_an_ads_snapshot_without_modelfile_changes_nothing(cfg, fakes):
+    s = store(cfg)
+    s.save_ad_examples([{"id": "before"}])
+    s.save_ad_rules("rule before\n")
+    s.save_dedup_cases([{"titles": ["a", "b"], "expected_groups": []}])
+    snap = s.snapshot(DATE, None, ["ads", "dedup"])  # damaged: an ads snapshot needs the Modelfile
+    s.save_ad_examples([{"id": "after"}])
+    s.save_ad_rules("rule after\n")
+    s.save_dedup_cases([{"titles": ["c", "d"], "expected_groups": []}])
+    with pytest.raises(FileNotFoundError, match="holds no Modelfile"):
+        rollback(cfg, DATE)
+    assert s.ad_examples() == [{"id": "after"}] and s.ad_rules() == "rule after\n"
+    assert s.dedup_cases() == [{"titles": ["c", "d"], "expected_groups": []}]
+    assert fakes.installed == [] and (snap / "learned_ad_examples.json").exists()
+
+
+def _cli_rollback(cfg, monkeypatch):
+    monkeypatch.setattr(sys, "argv", ["newsradar", "tune", "--config", str(cfg.config_path), "--rollback", DATE])
+    with pytest.raises(SystemExit) as info:
+        cli.main()
+    return info.value.code
+
+
+@pytest.mark.parametrize("text", ["{not json", '{"other": 1}'])
+def test_cli_rollback_of_bad_applied_json_prints_one_line_and_exits_nonzero(cfg, fakes, monkeypatch, capsys, text):
+    s = store(cfg)
+    s.save_ad_examples([{"id": "now"}])
+    snap = s.snapshot(DATE, "FROM /blobs/old\n", ["ads"])
+    (snap / "applied.json").write_text(text)
+    assert _cli_rollback(cfg, monkeypatch) not in (0, None)
+    err = capsys.readouterr().err
+    assert "Traceback" not in err and len(err.strip().splitlines()) == 1 and "applied.json" in err
+    assert s.ad_examples() == [{"id": "now"}] and fakes.installed == []
+
+
+def test_cli_rollback_of_an_ads_snapshot_without_modelfile_exits_nonzero(cfg, fakes, monkeypatch, capsys):
+    store(cfg).snapshot(DATE, None, ["ads"])
+    assert _cli_rollback(cfg, monkeypatch) not in (0, None)
+    err = capsys.readouterr().err
+    assert "Traceback" not in err and len(err.strip().splitlines()) == 1 and "holds no Modelfile" in err
+
+
 def test_cli_tune_runs_with_today_by_default(cfg, monkeypatch):
     seen = {}
     monkeypatch.setattr(tuner, "run_tune", lambda config, date, log=print, **kw: seen.update(date=date, **kw))

@@ -201,3 +201,30 @@ def test_write_goes_through_a_temp_file_in_the_same_folder(tmp_path, monkeypatch
     s.save_dedup_cases([{"titles": ["a", "b"], "expected_groups": []}])
     assert seen == [(str(s.root), str(s.root))]
     assert json.loads((s.root / "learned_dedup_cases.json").read_text())[0]["titles"] == ["a", "b"]
+
+
+# ---------- safe snapshots ----------
+
+def test_snapshot_writes_applied_json_and_modelfile_through_a_temp_file(tmp_path, monkeypatch):
+    s = TuningStore(tmp_path)
+    replaced = []
+    real = os.replace
+
+    def spy(src, dst):
+        replaced.append(os.path.basename(dst))
+        real(src, dst)
+
+    monkeypatch.setattr(store_module.os, "replace", spy)
+    snap = s.snapshot("2026-11-23", "MODELFILE", ["ads"])
+    assert sorted(replaced) == ["Modelfile", "applied.json"]
+    assert json.loads((snap / "applied.json").read_text()) == {"parts": ["ads"]}
+    assert sorted(p.name for p in snap.iterdir()) == ["Modelfile", "applied.json"]
+
+
+@pytest.mark.parametrize("text", ["{not json", "[]", '{"other": 1}', '{"parts": "ads"}', ""])
+def test_damaged_applied_json_raises_bad_snapshot_error(tmp_path, text):
+    s = TuningStore(tmp_path)
+    snap = s.snapshot("2026-11-23", "M", ["ads"])
+    (snap / "applied.json").write_text(text)
+    with pytest.raises(store_module.BadSnapshotError, match="applied.json"):
+        s.snapshot_parts(snap)

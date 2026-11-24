@@ -192,17 +192,23 @@ def rebuild_live_model(config: Config, model_name: str | None = None) -> str:
 def rollback(config: Config, date: str) -> bool:
     """Restore the parts the latest snapshot on date applied. When that run
     changed the ads, reinstall the live model from the Modelfile the snapshot
-    took from the model that was live then. Returns True when it reinstalled."""
+    took from the model that was live then. Returns True when it reinstalled.
+
+    Raises FileNotFoundError when there is no snapshot, or when an ads
+    snapshot holds no Modelfile, and BadSnapshotError when its applied.json is
+    damaged. Both checks run before any file changes."""
     store = TuningStore(config.tuning.data_dir)
     snap = store.latest_snapshot(date)
     if snap is None:
         raise FileNotFoundError(f"no snapshot for {date} in {store.root / 'snapshots'}")
     parts = store.snapshot_parts(snap)
+    if "ads" in parts and not store.has_modelfile(snap):
+        raise FileNotFoundError(f"snapshot {snap} changed the ads but holds no Modelfile; nothing was restored")
     text = store.restore(snap, parts)
     if "ads" not in parts:
         return False
-    if text is None:
-        raise FileNotFoundError(f"snapshot {snap} changed the ads but holds no Modelfile")
+    if text is None:  # has_modelfile saw it, so only a file removed since then gets here
+        raise FileNotFoundError(f"snapshot {snap} lost its Modelfile during the rollback")
     _install(config, text, live_model_name(config))
     return True
 
